@@ -16,20 +16,21 @@ import (
 
 // envStruct 儲存應用程式的環境變數設定
 type envStruct struct {
-	BitfindexApiKey         string  `mapstructure:"BITFINDEX_API_KEY" json:"BITFINDEX_API_KEY"`
-	BitfindexSecretKey      string  `mapstructure:"BITFINDEX_SECRET_KEY" json:"BITFINDEX_SECRET_KEY"`
-	Currency                string  `mapstructure:"CURRENCY" json:"CURRENCY"`
-	OrderLimit              int     `mapstructure:"ORDER_LIMIT" json:"ORDER_LIMIT"`
-	MinutesRun              int     `mapstructure:"MINUTES_RUN" json:"MINUTES_RUN"`
-	MinLoan                 float64 `mapstructure:"MIN_LOAN" json:"MIN_LOAN"`
-	MaxLoan                 float64 `mapstructure:"MAX_LOAN" json:"MAX_LOAN"` // 新增最大貸出限制
-	MinDailyLendRate        float64 `mapstructure:"MIN_DAILY_LEND_RATE" json:"MIN_DAILY_LEND_RATE"`
-	SpreadLend              int     `mapstructure:"SPREAD_LEND" json:"SPREAD_LEND"`
-	GapBottom               float64 `mapstructure:"GAP_BOTTOM" json:"GAP_BOTTOM"`
-	GapTop                  float64 `mapstructure:"GAP_TOP" json:"GAP_TOP"`
-	ThirtyDayDailyThreshold float64 `mapstructure:"THIRTY_DAY_DAILY_THRESHOLD" json:"THIRTY_DAY_DAILY_THRESHOLD"`
-	HighHoldDailyRate       float64 `mapstructure:"HIGH_HOLD_DAILY_RATE" json:"HIGH_HOLD_DAILY_RATE"`
-	HighHoldAmount          float64 `mapstructure:"HIGH_HOLD_AMOUNT" json:"HIGH_HOLD_AMOUNT"`
+	BitfindexApiKey             string  `mapstructure:"BITFINDEX_API_KEY" json:"BITFINDEX_API_KEY"`
+	BitfindexSecretKey          string  `mapstructure:"BITFINDEX_SECRET_KEY" json:"BITFINDEX_SECRET_KEY"`
+	Currency                    string  `mapstructure:"CURRENCY" json:"CURRENCY"`
+	OrderLimit                  int     `mapstructure:"ORDER_LIMIT" json:"ORDER_LIMIT"`
+	MinutesRun                  int     `mapstructure:"MINUTES_RUN" json:"MINUTES_RUN"`
+	MinLoan                     float64 `mapstructure:"MIN_LOAN" json:"MIN_LOAN"`
+	MaxLoan                     float64 `mapstructure:"MAX_LOAN" json:"MAX_LOAN"` // 新增最大貸出限制
+	MinDailyLendRate            float64 `mapstructure:"MIN_DAILY_LEND_RATE" json:"MIN_DAILY_LEND_RATE"`
+	SpreadLend                  int     `mapstructure:"SPREAD_LEND" json:"SPREAD_LEND"`
+	GapBottom                   float64 `mapstructure:"GAP_BOTTOM" json:"GAP_BOTTOM"`
+	GapTop                      float64 `mapstructure:"GAP_TOP" json:"GAP_TOP"`
+	ThirtyDayDailyThreshold     float64 `mapstructure:"THIRTY_DAY_DAILY_THRESHOLD" json:"THIRTY_DAY_DAILY_THRESHOLD"`
+	HighHoldDailyRate           float64 `mapstructure:"HIGH_HOLD_DAILY_RATE" json:"HIGH_HOLD_DAILY_RATE"`
+	HighHoldAmount              float64 `mapstructure:"HIGH_HOLD_AMOUNT" json:"HIGH_HOLD_AMOUNT"`
+	ApplyBonusIfNoPendingOrders float64 `mapstructure:"APPLY_BONUS_IF_NO_PENDING_ORDERS" json:"APPLY_BONUS_IF_NO_PENDING_ORDERS"`
 }
 
 var (
@@ -132,7 +133,7 @@ func scheduleTask(minutes int, task func()) {
 // botRun 執行機器人主程式邏輯
 func botRun() {
 	fmt.Println("取消所有未完成訂單...")
-	cancelAllOffers()
+	hasPendingOrders := cancelAllOffers()
 
 	fmt.Println("取得可用額度...")
 	fundsAvailable, err := getAvailableFunds(env.Currency)
@@ -167,19 +168,23 @@ func botRun() {
 	)
 
 	// 依照算出的貸出訂單逐筆下單，且控制在 OrderLimit 以內
-	placeLoanOffers(loanOffers, env.OrderLimit)
+	placeLoanOffers(loanOffers, env.OrderLimit, hasPendingOrders)
 }
 
 // cancelAllOffers 取消所有未完成訂單
-func cancelAllOffers() {
+func cancelAllOffers() (hasPendingOrders bool) {
+	hasPendingOrders = false
+
 	offers, err := client.Offers.Offers()
 	if err != nil {
 		fmt.Println("取得未完成訂單失敗:", err)
-		return
+		return hasPendingOrders
 	}
 
 	for _, offer := range offers {
 		if offer.Currency == strings.ToUpper(env.Currency) {
+			hasPendingOrders = true
+
 			o, err := client.Offers.Cancel(offer.Id)
 			if err != nil {
 				fmt.Println(err)
@@ -192,6 +197,8 @@ func cancelAllOffers() {
 			}
 		}
 	}
+
+	return hasPendingOrders
 }
 
 // getAvailableFunds 取得指定幣別的可用餘額
@@ -210,12 +217,17 @@ func getAvailableFunds(currency string) (float64, error) {
 }
 
 // placeLoanOffers 依照產生的貸出訂單陣列逐筆下單
-func placeLoanOffers(loanOffers MarginBotLoanOffers, orderLimit int) {
+func placeLoanOffers(loanOffers MarginBotLoanOffers, orderLimit int, hasPendingOrders bool) {
 	orderCount := 0
 	for _, o := range loanOffers {
 		if orderLimit != 0 && orderCount >= orderLimit {
 			break
 		}
+
+		if !hasPendingOrders {
+			o.Rate = (o.Rate/365 + env.ApplyBonusIfNoPendingOrders) * 365
+		}
+
 		fmt.Printf("下單 => Rate: %.6f, Amount: %.4f, Period: %d \n", o.Rate/365, o.Amount, o.Period)
 
 		_, err := client.Offers.New(env.Currency, o.Amount, o.Rate, int64(o.Period), "lend")

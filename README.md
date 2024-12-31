@@ -28,4 +28,6 @@ GAP_TOP: 5000 # 參數是指ask掛單裡面第幾個 index 上限
 THIRTY_DAY_DAILY_THRESHOLD: 0.04 # 利率超過多少就掛30天的單
 HIGH_HOLD_DAILY_RATE: 0.0
 HIGH_HOLD_AMOUNT: 0
+
+APPLY_BONUS_IF_NO_PENDING_ORDERS: 0.002 # 當下次執行時沒有未成功訂單時就加利率(避免訂單成功全都在低利率上)
 ```
