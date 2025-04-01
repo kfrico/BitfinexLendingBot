@@ -330,7 +330,7 @@ func marginBotGetLoanOffers(
 		}
 
 		// 若市場年化利率高於閾值，則將訂單期間設定為 30 天
-		if conf.ThirtyDayDailyThreshold > 0 && rate >= conf.ThirtyDayDailyThreshold*365 {
+		if conf.ThirtyDayDailyThreshold > 0 && tmp.Rate >= conf.ThirtyDayDailyThreshold*365 {
 			tmp.Period = 30
 		} else {
 			tmp.Period = 2
