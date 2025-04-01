@@ -254,7 +254,7 @@ func marginBotGetLoanOffers(
 	// 初始化可分配資金
 	splitFundsAvailable := fundsAvailable
 
-	// 高持有策略: 若 HighHoldAmount 大於最小貸出額，則預留這部分資金於 30 天長期訂單
+	// 高持有策略: 若 HighHoldAmount 大於最小貸出額，則預留這部分資金於 120 天長期訂單
 	// 並同時檢查是否超過最大額度 (MaxLoan) 有設定時則做裁切
 	if conf.HighHoldAmount > conf.MinLoan {
 		highHold := math.Min(splitFundsAvailable, conf.HighHoldAmount)
@@ -267,7 +267,7 @@ func marginBotGetLoanOffers(
 		tmp := MarginBotLoanOffer{
 			Amount: highHold,
 			Rate:   conf.HighHoldDailyRate * 365, // 年化利率
-			Period: 30,                           // 固定貸出 30 天
+			Period: 120,                          // 固定貸出 120 天
 		}
 		splitFundsAvailable -= highHold
 		loanOffers = append(loanOffers, tmp)
@@ -329,9 +329,9 @@ func marginBotGetLoanOffers(
 			tmp.Rate = rate
 		}
 
-		// 若市場年化利率高於閾值，則將訂單期間設定為 30 天
+		// 若市場年化利率高於閾值，則將訂單期間設定為 120 天
 		if conf.ThirtyDayDailyThreshold > 0 && tmp.Rate >= conf.ThirtyDayDailyThreshold*365 {
-			tmp.Period = 30
+			tmp.Period = 120
 		} else {
 			tmp.Period = 2
 		}
