@@ -184,6 +184,9 @@ func botRun() {
 	fmt.Println("取消所有未完成訂單...")
 	hasPendingOrders := cancelAllOffers()
 
+	// 暫停幾秒避免取消訂單的金額還沒歸還
+	time.Sleep(5 * time.Second)
+
 	fmt.Println("取得可用額度...")
 	fundsAvailable, err := getAvailableFunds(env.Currency)
 	if err != nil {
@@ -487,6 +490,8 @@ func handleTelegramMessages() {
 		// 手動重新啟動，清除所有訂單，重新運行
 		case text == "/restart":
 			botRun()
+			msg := tgbotapi.NewMessage(chatID, "機器人已重新啟動，清除所有訂單，重新運行")
+			bot.Send(msg)
 		case text == "/rate":
 			// 顯示當前貸出利率
 			rate, err := getLendRate()
@@ -501,7 +506,6 @@ func handleTelegramMessages() {
 				msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("目前貸出利率: %.4f%s", rate, thresholdInfo))
 				bot.Send(msg)
 			}
-
 		case text == "/check":
 			// 執行檢查並獲取結果
 			rate, err := getLendRate()
