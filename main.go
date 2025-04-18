@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bitfinexcom/bitfinex-api-go/v1"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/spf13/viper"
 	"github.com/urfave/cli"
 )
@@ -31,11 +32,14 @@ type envStruct struct {
 	HighHoldDailyRate           float64 `mapstructure:"HIGH_HOLD_DAILY_RATE" json:"HIGH_HOLD_DAILY_RATE"`
 	HighHoldAmount              float64 `mapstructure:"HIGH_HOLD_AMOUNT" json:"HIGH_HOLD_AMOUNT"`
 	ApplyBonusIfNoPendingOrders float64 `mapstructure:"APPLY_BONUS_IF_NO_PENDING_ORDERS" json:"APPLY_BONUS_IF_NO_PENDING_ORDERS"`
+	TelegramBotToken            string  `mapstructure:"TELEGRAM_BOT_TOKEN" json:"TELEGRAM_BOT_TOKEN"`
+	TelegramAuthToken           string  `mapstructure:"TELEGRAM_AUTH_TOKEN" json:"TELEGRAM_AUTH_TOKEN"`
 }
 
 var (
 	env    envStruct
 	client *bitfinex.Client
+	bot    *tgbotapi.BotAPI
 )
 
 // MarginBotConf 設定機器人運作參數
@@ -88,6 +92,9 @@ func main() {
 func runApp(c *cli.Context) {
 	loadConfig(c.String("config"))
 	initBitfinexClient()
+	initTelegramBot()
+
+	go handleTelegramMessages()
 
 	log.Println("ENV:", env)
 	log.Println("Config 設定成功")
@@ -115,6 +122,17 @@ func loadConfig(configPath string) {
 // initBitfinexClient 初始化 Bitfinex 客戶端
 func initBitfinexClient() {
 	client = bitfinex.NewClient().Auth(env.BitfindexApiKey, env.BitfindexSecretKey)
+}
+
+// initTelegramBot 初始化 Telegram bot 客戶端
+func initTelegramBot() {
+	var err error
+	bot, err = tgbotapi.NewBotAPI(env.TelegramBotToken)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	log.Printf("Authorized on account %s", bot.Self.UserName)
 }
 
 // scheduleTask 定時執行任務，每 n 分鐘執行一次
@@ -342,4 +360,47 @@ func marginBotGetLoanOffers(
 	}
 
 	return
+}
+
+func handleTelegramMessages() {
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+
+	updates, err := bot.GetUpdatesChan(u)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	authMap := make(map[int64]bool)
+
+	for update := range updates {
+		if update.Message == nil {
+			continue
+		}
+
+		chatID := update.Message.Chat.ID
+		text := update.Message.Text
+
+		if text == "/auth" {
+			msg := tgbotapi.NewMessage(chatID, "請輸入驗證 token：")
+			bot.Send(msg)
+		} else if authMap[chatID] {
+			// 已驗證，處理其他指令
+			switch text {
+			case "/status":
+				msg := tgbotapi.NewMessage(chatID, "目前狀態正常")
+				bot.Send(msg)
+			default:
+				msg := tgbotapi.NewMessage(chatID, "無效的指令")
+				bot.Send(msg)
+			}
+		} else if text == env.TelegramAuthToken {
+			authMap[chatID] = true
+			msg := tgbotapi.NewMessage(chatID, "驗證成功，現在可以傳送指令了")
+			bot.Send(msg)
+		} else {
+			msg := tgbotapi.NewMessage(chatID, "驗證失敗，請先輸入 /auth 並提供正確的驗證 token")
+			bot.Send(msg)
+		}
+	}
 }
