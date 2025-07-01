@@ -1,0 +1,213 @@
+package telegram
+
+import (
+	"fmt"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+
+	"github.com/kfrico/BitfinexLendingBot/internal/bitfinex"
+	"github.com/kfrico/BitfinexLendingBot/internal/config"
+	"github.com/kfrico/BitfinexLendingBot/internal/rates"
+)
+
+// LendingBot interface 用於避免循環依賴
+type LendingBot interface {
+	GetActiveLendingCredits() ([]*bitfinex.FundingCredit, error)
+}
+
+// Bot Telegram 機器人封裝
+type Bot struct {
+	api                 *tgbotapi.BotAPI
+	config              *config.Config
+	bitfinexClient      *bitfinex.Client
+	rateConverter       *rates.Converter
+	authenticatedChatID int64
+	chatIDMutex         sync.Mutex
+	restartCallback     func() error // 重啟回調函數
+	lendingBot          LendingBot   // 借貸機器人引用
+}
+
+// NewBot 創建新的 Telegram 機器人
+func NewBot(cfg *config.Config, bfxClient *bitfinex.Client) (*Bot, error) {
+	api, err := tgbotapi.NewBotAPI(cfg.TelegramBotToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create telegram bot: %w", err)
+	}
+
+	log.Printf("Authorized on account %s", api.Self.UserName)
+
+	return &Bot{
+		api:            api,
+		config:         cfg,
+		bitfinexClient: bfxClient,
+		rateConverter:  rates.NewConverter(),
+	}, nil
+}
+
+// Start 啟動 Telegram 機器人
+func (b *Bot) Start() {
+	for {
+		u := tgbotapi.NewUpdate(0)
+		u.Timeout = 60
+
+		updates, err := b.api.GetUpdatesChan(u)
+		if err != nil {
+			log.Printf("Failed to get updates, retrying in 3 seconds: %v", err)
+			time.Sleep(3 * time.Second)
+			continue
+		}
+
+		for update := range updates {
+			if update.Message == nil {
+				continue
+			}
+
+			go b.handleMessage(update.Message)
+		}
+
+		log.Println("Update channel closed, retrying in 3 seconds...")
+		time.Sleep(3 * time.Second)
+	}
+}
+
+// handleMessage 處理 Telegram 訊息
+func (b *Bot) handleMessage(message *tgbotapi.Message) {
+	chatID := message.Chat.ID
+	text := message.Text
+
+	// 處理身份驗證
+	if !b.isAuthenticated(chatID) {
+		b.handleAuthentication(chatID, text)
+		return
+	}
+
+	// 處理已驗證用戶的指令
+	b.handleCommand(chatID, text)
+}
+
+// isAuthenticated 檢查是否已驗證
+func (b *Bot) isAuthenticated(chatID int64) bool {
+	b.chatIDMutex.Lock()
+	defer b.chatIDMutex.Unlock()
+	return b.authenticatedChatID == chatID
+}
+
+// setAuthenticated 設置已驗證的聊天ID
+func (b *Bot) setAuthenticated(chatID int64) {
+	b.chatIDMutex.Lock()
+	defer b.chatIDMutex.Unlock()
+	b.authenticatedChatID = chatID
+}
+
+// getAuthenticatedChatID 獲取已驗證的聊天ID
+func (b *Bot) GetAuthenticatedChatID() int64 {
+	b.chatIDMutex.Lock()
+	defer b.chatIDMutex.Unlock()
+	return b.authenticatedChatID
+}
+
+// sendMessage 發送訊息
+func (b *Bot) sendMessage(chatID int64, text string) error {
+	msg := tgbotapi.NewMessage(chatID, text)
+	_, err := b.api.Send(msg)
+	return err
+}
+
+// SendNotification 發送通知（公開方法供外部調用）
+func (b *Bot) SendNotification(message string) error {
+	chatID := b.GetAuthenticatedChatID()
+	if chatID == 0 {
+		return fmt.Errorf("no authenticated chat ID")
+	}
+	return b.sendMessage(chatID, message)
+}
+
+// SetRestartCallback 設置重啟回調函數
+func (b *Bot) SetRestartCallback(callback func() error) {
+	b.restartCallback = callback
+}
+
+// SetLendingBot 設置借貸機器人引用
+func (b *Bot) SetLendingBot(lendingBot LendingBot) {
+	b.lendingBot = lendingBot
+}
+
+// handleAuthentication 處理身份驗證
+func (b *Bot) handleAuthentication(chatID int64, text string) {
+	switch text {
+	case "/auth":
+		b.sendMessage(chatID, "請輸入驗證 token：")
+	case b.config.TelegramAuthToken:
+		b.setAuthenticated(chatID)
+		b.sendMessage(chatID, "驗證成功，現在可以傳送指令了")
+	default:
+		b.sendMessage(chatID, "請先進行驗證，輸入 /auth 開始驗證流程")
+	}
+}
+
+// handleCommand 處理指令
+func (b *Bot) handleCommand(chatID int64, text string) {
+	switch {
+	case text == "/help" || text == "/start":
+		b.handleHelp(chatID)
+	case text == "/restart":
+		b.handleRestart(chatID)
+	case text == "/rate":
+		b.handleRate(chatID)
+	case text == "/check":
+		b.handleCheck(chatID)
+	case text == "/status":
+		b.handleStatus(chatID)
+	case strings.HasPrefix(text, "/threshold "):
+		b.handleSetThreshold(chatID, text)
+	case strings.HasPrefix(text, "/reserve "):
+		b.handleSetReserve(chatID, text)
+	case strings.HasPrefix(text, "/orderlimit "):
+		b.handleSetOrderLimit(chatID, text)
+	case strings.HasPrefix(text, "/mindailylendrate "):
+		b.handleSetMinDailyRate(chatID, text)
+	case strings.HasPrefix(text, "/highholdrate "):
+		b.handleSetHighHoldRate(chatID, text)
+	case strings.HasPrefix(text, "/highholdamount "):
+		b.handleSetHighHoldAmount(chatID, text)
+	case strings.HasPrefix(text, "/highholdorders "):
+		b.handleSetHighHoldOrders(chatID, text)
+	case text == "/strategy":
+		b.handleStrategyStatus(chatID)
+	case text == "/smartstrategy on":
+		b.handleToggleSmartStrategy(chatID, true)
+	case text == "/smartstrategy off":
+		b.handleToggleSmartStrategy(chatID, false)
+	case text == "/lending":
+		b.handleLendingCredits(chatID)
+	default:
+		b.sendMessage(chatID, "無效的指令，輸入 /help 查看所有可用指令")
+	}
+}
+
+// handleHelp 處理幫助指令
+func (b *Bot) handleHelp(chatID int64) {
+	helpText := `可用指令:
+/rate - 顯示當前貸出利率和閾值
+/check - 檢查貸出利率是否超過閾值
+/threshold [數值] - 設置利率通知閾值
+/reserve [數值] - 設置不參與借貸的保留金額
+/orderlimit [數值] - 設置單次執行最大下單數量限制
+/mindailylendrate [數值] - 設置最低每日貸出利率
+/highholdrate [數值] - 設置高額持有策略的日利率
+/highholdamount [數值] - 設置高額持有策略的金額
+/highholdorders [數值] - 設置高額持有策略的訂單數量
+/strategy - 顯示當前策略狀態
+/smartstrategy on - 啟用智能策略
+/smartstrategy off - 停用智能策略
+/lending - 查看當前活躍的借貸訂單
+/status - 顯示系統狀態
+/help - 顯示此幫助訊息
+/restart - 手動重新啟動，清除所有訂單，重新運行`
+
+	b.sendMessage(chatID, helpText)
+}
