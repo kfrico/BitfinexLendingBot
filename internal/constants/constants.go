@@ -31,12 +31,16 @@ const (
 	DefaultTimeout    = 30 * time.Second
 	RetryDelay        = 5 * time.Second
 	HourlyCheckMinute = 6
+	ShutdownTimeout   = 10 * time.Second
 )
 
 // Telegram 相關常量
 const (
-	TelegramCommandPrefix = "/"
-	MaxMessageLength      = 4096
+	TelegramCommandPrefix  = "/"
+	MaxMessageLength       = 4096
+	TelegramRetryDelay     = 3 * time.Second
+	TelegramUpdateTimeout  = 60 * time.Second
+	MaxConcurrentMessages  = 10
 )
 
 // 智能策略預設值
@@ -52,4 +56,13 @@ const (
 	RecommendedMaxRateMax    = 3.0   // 激進用戶建議值
 	RecommendedMinRateMin    = 0.7   // 激進用戶建議值
 	RecommendedMinRateMax    = 0.9   // 保守用戶建議值
+)
+
+// 顯示和處理限制
+const (
+	MaxDisplayOrders        = 5    // 最多顯示的訂單數量
+	SmallRateChangePercent  = 0.01 // 1% 小變化閾值
+	RateRangeIncreasePercent = 0.05 // 5% 利率範圍增加
+	MaxHistorySize          = 100  // 最大歷史記錄大小
+	ReducedSplitsMultiplier = 0.7  // 高波動時分割數減少倍數
 )

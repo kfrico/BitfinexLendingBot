@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/kfrico/BitfinexLendingBot/internal/bitfinex"
 	"github.com/kfrico/BitfinexLendingBot/internal/config"
+	"github.com/kfrico/BitfinexLendingBot/internal/constants"
 	"github.com/kfrico/BitfinexLendingBot/internal/rates"
 )
 
@@ -50,27 +52,67 @@ func NewBot(cfg *config.Config, bfxClient *bitfinex.Client) (*Bot, error) {
 
 // Start 啟動 Telegram 機器人
 func (b *Bot) Start() {
+	// 創建一個永不取消的 context
+	ctx := context.Background()
+	b.StartWithContext(ctx)
+}
+
+// StartWithContext 啟動支持 context 的 Telegram 機器人
+func (b *Bot) StartWithContext(ctx context.Context) {
 	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Telegram 機器人收到停止信號")
+			return
+		default:
+		}
+
 		u := tgbotapi.NewUpdate(0)
-		u.Timeout = 60
+		u.Timeout = int(constants.TelegramUpdateTimeout.Seconds())
 
 		updates, err := b.api.GetUpdatesChan(u)
 		if err != nil {
-			log.Printf("Failed to get updates, retrying in 3 seconds: %v", err)
-			time.Sleep(3 * time.Second)
-			continue
-		}
-
-		for update := range updates {
-			if update.Message == nil {
+			log.Printf("Failed to get updates, retrying in %v: %v", constants.TelegramRetryDelay, err)
+			
+			// 使用 context 支持的 sleep
+			select {
+			case <-ctx.Done():
+				log.Println("Telegram 機器人在重試等待中收到停止信號")
+				return
+			case <-time.After(constants.TelegramRetryDelay):
 				continue
 			}
-
-			go b.handleMessage(update.Message)
 		}
 
-		log.Println("Update channel closed, retrying in 3 seconds...")
-		time.Sleep(3 * time.Second)
+		// 處理更新，直到 channel 關閉或 context 取消
+		for {
+			select {
+			case <-ctx.Done():
+				log.Println("Telegram 機器人在處理更新時收到停止信號")
+				return
+			case update, ok := <-updates:
+				if !ok {
+					log.Printf("Update channel closed, retrying in %v...", constants.TelegramRetryDelay)
+					goto retry
+				}
+				
+				if update.Message == nil {
+					continue
+				}
+
+				go b.handleMessage(update.Message)
+			}
+		}
+
+	retry:
+		// 使用 context 支持的重試延遲
+		select {
+		case <-ctx.Done():
+			log.Println("Telegram 機器人在重試前收到停止信號")
+			return
+		case <-time.After(constants.TelegramRetryDelay):
+			continue
+		}
 	}
 }
 

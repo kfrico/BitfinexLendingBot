@@ -1,0 +1,35 @@
+BITFINEX_API_KEY: "your_api_key_here"
+BITFINEX_SECRET_KEY: "your_secret_key_here"
+
+CURRENCY: "usd"
+
+ORDER_LIMIT: 3 # 每次掛單只掛幾筆，避免一次掛太多都成立，錯過大利率
+MINUTES_RUN: 3 # 每隔幾分鐘執行一次
+
+MIN_LOAN: 150 # 每筆最小金額
+#MAX_LOAN: 150 # 每筆最大金額
+
+MIN_DAILY_LEND_RATE: 0.02 # 最小利率
+SPREAD_LEND: 30 # 資金分配幾份
+GAP_BOTTOM: 10 # 參數是指ask掛單裡面第幾個index 下限 通常有好幾千個掛
+GAP_TOP: 5000 # 參數是指ask掛單裡面第幾個index 上限 通常有好幾千個掛單
+THIRTY_DAY_LEND_RATE_THRESHOLD: 0.04 # 超過多少就掛30天的單
+ONE_TWENTY_DAY_LEND_RATE_THRESHOLD: 0.045 # 超過多少就掛120天的單
+HIGH_HOLD_RATE: 0.1
+HIGH_HOLD_AMOUNT: 155
+HIGH_HOLD_ORDERS: 1
+RATE_BONUS: 0.002 # 當下次執行時沒有未成功訂單時就加利率(避免訂單成功全都在低利率上)
+
+TELEGRAM_BOT_TOKEN: "your_telegram_bot_token_here"
+TELEGRAM_AUTH_TOKEN: "your_secure_auth_token_here"
+
+NOTIFY_RATE_THRESHOLD: 0.1
+RESERVE_AMOUNT: 0
+
+ENABLE_SMART_STRATEGY: true #啟用智能策略
+VOLATILITY_THRESHOLD: 0.002     # 高波動閾值 (預設: 0.002)
+MAX_RATE_MULTIPLIER: 2.0        # 最大利率倍數 (預設: 2.0)
+MIN_RATE_MULTIPLIER: 0.8        # 最小利率倍數 (預設: 0.8)
+
+LENDING_CHECK_MINUTES: 5 #每隔五分鐘檢查是否有成功借貸的訂單
+TEST_MODE: true

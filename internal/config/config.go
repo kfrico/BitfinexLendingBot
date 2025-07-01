@@ -88,11 +88,11 @@ func LoadConfig(configPath string) (*Config, error) {
 
 // Validate 驗證配置有效性
 func (c *Config) Validate() error {
-	if c.BitfinexApiKey == "" {
-		return errors.NewValidationError("BITFINEX_API_KEY is required")
+	if c.BitfinexApiKey == "" || c.BitfinexApiKey == "your_api_key_here" {
+		return errors.NewValidationError("BITFINEX_API_KEY is required and must be set to your actual API key")
 	}
-	if c.BitfinexSecretKey == "" {
-		return errors.NewValidationError("BITFINEX_SECRET_KEY is required")
+	if c.BitfinexSecretKey == "" || c.BitfinexSecretKey == "your_secret_key_here" {
+		return errors.NewValidationError("BITFINEX_SECRET_KEY is required and must be set to your actual secret key")
 	}
 	if c.Currency == "" {
 		return errors.NewValidationError("CURRENCY is required")

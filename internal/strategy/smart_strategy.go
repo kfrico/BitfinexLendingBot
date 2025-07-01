@@ -189,7 +189,7 @@ func (ss *SmartStrategy) calculateSmartSpreadOffers(splitFundsAvailable float64,
 	// 根據市場狀況調整分割數
 	if condition.Volatility > ss.config.VolatilityThreshold {
 		// 高波動時減少分割，提升競爭力
-		numSplits = int(float64(numSplits) * 0.7)
+		numSplits = int(float64(numSplits) * constants.ReducedSplitsMultiplier)
 	}
 
 	// 計算每筆金額
@@ -339,7 +339,7 @@ func (ss *SmartStrategy) calculateProgressiveRate(fundingBook []*bitfinex.Fundin
 	if len(rates) == 0 {
 		// 沒有符合最小利率的數據，使用合成利率
 		baseRate := minDailyRate
-		increment := baseRate * 0.05 * float64(orderIndex)
+		increment := baseRate * constants.RateRangeIncreasePercent * float64(orderIndex)
 		return baseRate + increment
 	}
 
@@ -368,10 +368,10 @@ func (ss *SmartStrategy) calculateProgressiveRate(fundingBook []*bitfinex.Fundin
 		rateRange := maxRate - minRate
 
 		// 如果利率範圍太小（所有利率相同），則人工創建遞增範圍
-		if rateRange < minRate*0.01 { // 小於1%的變化
-			// 使用基礎利率創建5%的遞增範圍
+		if rateRange < minRate*constants.SmallRateChangePercent {
+			// 使用基礎利率創建遞增範圍
 			minRate = minRate
-			maxRate = minRate * 1.05
+			maxRate = minRate * (1.0 + constants.RateRangeIncreasePercent)
 			rateRange = maxRate - minRate
 			log.Printf("利率範圍太小，使用人工範圍: %.6f%%-%.6f%%", minRate*100, maxRate*100)
 		}
@@ -472,7 +472,7 @@ func (ss *SmartStrategy) calculateSmartPeriod(dailyRate float64, condition *Mark
 // calculateTotalVolume 計算總成交量
 func (ss *SmartStrategy) calculateTotalVolume(fundingBook []*bitfinex.FundingBookEntry) float64 {
 	var totalVolume float64
-	maxEntries := 10 // 只計算前10層
+	maxEntries := 10 // 只計算前10層，基於市場深度分析最佳實踐
 
 	for i, entry := range fundingBook {
 		if i >= maxEntries {

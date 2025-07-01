@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/urfave/cli"
@@ -23,6 +27,11 @@ type Application struct {
 	telegramBot   *telegram.Bot
 	lendingBot    *strategy.LendingBot
 	rateConverter *rates.Converter
+	
+	// 併發控制
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // NewApplication 創建新的應用程式實例
@@ -48,12 +57,17 @@ func NewApplication(configPath string) (*Application, error) {
 	// 創建利率轉換器
 	rateConverter := rates.NewConverter()
 
+	// 創建 context 和 cancel 函數
+	ctx, cancel := context.WithCancel(context.Background())
+
 	app := &Application{
 		config:        cfg,
 		bfxClient:     bfxClient,
 		telegramBot:   telegramBot,
 		lendingBot:    lendingBot,
 		rateConverter: rateConverter,
+		ctx:           ctx,
+		cancel:        cancel,
 	}
 
 	// 設置 Telegram bot 重啟回調
@@ -82,25 +96,100 @@ func (app *Application) Run() error {
 		log.Println("🚀 將執行真實的交易操作")
 	}
 
-	// 啟動 Telegram 機器人
-	go app.telegramBot.Start()
+	// 設置信號處理
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// 啟動每小時利率檢查
-	go app.scheduleHourlyRateCheck()
-
-	// 啟動借貸訂單檢查
-	go app.scheduleLendingCheck()
+	// 啟動所有 goroutines
+	app.startWorkers()
 
 	log.Printf("Scheduler started at: %v", time.Now())
 	log.Printf("⚙️ 主要任務間隔: %d 分鐘", app.config.MinutesRun)
 	log.Printf("💰 借貸檢查間隔: %d 分鐘", app.config.LendingCheckMinutes)
 	log.Printf("📊 利率檢查: 每小時")
+	log.Println("🔄 按 Ctrl+C 優雅關閉...")
+
+	// 等待信號或 context 取消
+	select {
+	case sig := <-sigChan:
+		log.Printf("收到信號 %v，開始優雅關閉...", sig)
+	case <-app.ctx.Done():
+		log.Println("Context 被取消，開始關閉...")
+	}
+
+	return app.shutdown()
+}
+
+// startWorkers 啟動所有工作 goroutines
+func (app *Application) startWorkers() {
+	// 啟動 Telegram 機器人
+	app.wg.Add(1)
+	go app.runWorker("TelegramBot", func() {
+		defer app.wg.Done()
+		app.telegramBot.StartWithContext(app.ctx)
+	})
+
+	// 啟動每小時利率檢查
+	app.wg.Add(1)
+	go app.runWorker("HourlyRateCheck", func() {
+		defer app.wg.Done()
+		app.scheduleHourlyRateCheck()
+	})
+
+	// 啟動借貸訂單檢查
+	app.wg.Add(1)
+	go app.runWorker("LendingCheck", func() {
+		defer app.wg.Done()
+		app.scheduleLendingCheck()
+	})
 
 	// 啟動主要業務邏輯調度
-	app.scheduleMainTask()
+	app.wg.Add(1)
+	go app.runWorker("MainTask", func() {
+		defer app.wg.Done()
+		app.scheduleMainTask()
+	})
+}
 
+// runWorker 安全運行工作任務
+func (app *Application) runWorker(name string, worker func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("工作任務 %s 發生 panic: %v", name, r)
+			// 可以在這裡添加重啟邏輯
+		}
+	}()
+	
+	log.Printf("啟動工作任務: %s", name)
+	worker()
+	log.Printf("工作任務 %s 已結束", name)
+}
+
+// shutdown 優雅關閉應用程式
+func (app *Application) shutdown() error {
+	log.Println("正在關閉應用程式...")
+	
+	// 取消 context
+	app.cancel()
+	
+	// 等待所有 goroutines 結束，設置超時
+	done := make(chan struct{})
+	go func() {
+		app.wg.Wait()
+		close(done)
+	}()
+	
+	select {
+	case <-done:
+		log.Println("所有工作任務已優雅結束")
+	case <-time.After(constants.ShutdownTimeout):
+		log.Println("等待超時，強制結束")
+	}
+	
+	log.Println("應用程式已關閉")
 	return nil
 }
+
 
 // scheduleMainTask 調度主要任務
 func (app *Application) scheduleMainTask() {
@@ -110,8 +199,14 @@ func (app *Application) scheduleMainTask() {
 	ticker := time.NewTicker(time.Duration(app.config.MinutesRun) * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		app.executeMainTask()
+	for {
+		select {
+		case <-app.ctx.Done():
+			log.Println("主要任務調度器收到停止信號")
+			return
+		case <-ticker.C:
+			app.executeMainTask()
+		}
 	}
 }
 
@@ -125,6 +220,13 @@ func (app *Application) executeMainTask() {
 // scheduleHourlyRateCheck 調度每小時利率檢查
 func (app *Application) scheduleHourlyRateCheck() {
 	for {
+		select {
+		case <-app.ctx.Done():
+			log.Println("利率檢查調度器收到停止信號")
+			return
+		default:
+		}
+
 		now := time.Now()
 		next := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), constants.HourlyCheckMinute, 0, 0, now.Location())
 		if now.After(next) || now.Equal(next) {
@@ -134,8 +236,14 @@ func (app *Application) scheduleHourlyRateCheck() {
 		delay := next.Sub(now)
 		log.Printf("下次執行時間: %s, 等待時間: %s", next.Format("2006-01-02 15:04:05"), delay)
 
-		time.Sleep(delay)
-		app.checkRateThreshold()
+		// 使用 context 支持的 sleep
+		select {
+		case <-app.ctx.Done():
+			log.Println("利率檢查調度器在等待中收到停止信號")
+			return
+		case <-time.After(delay):
+			app.checkRateThreshold()
+		}
 	}
 }
 
@@ -187,8 +295,14 @@ func (app *Application) scheduleLendingCheck() {
 	ticker := time.NewTicker(time.Duration(app.config.LendingCheckMinutes) * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		app.executeLendingCheck()
+	for {
+		select {
+		case <-app.ctx.Done():
+			log.Println("借貸檢查調度器收到停止信號")
+			return
+		case <-ticker.C:
+			app.executeLendingCheck()
+		}
 	}
 }
 

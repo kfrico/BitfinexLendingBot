@@ -408,10 +408,10 @@ func (lb *LendingBot) sendLendingNotification(credits []*bitfinex.FundingCredit)
 		totalEarnings += periodEarnings
 	}
 
-	// 顯示詳細信息（最多5個訂單）
+	// 顯示詳細信息（最多顯示配置數量的訂單）
 	for i, credit := range credits {
-		if i >= 5 { // 最多顯示5個訂單
-			remaining := len(credits) - 5
+		if i >= constants.MaxDisplayOrders {
+			remaining := len(credits) - constants.MaxDisplayOrders
 			message += fmt.Sprintf("... 還有 %d 個訂單\n", remaining)
 			break
 		}
@@ -426,7 +426,7 @@ func (lb *LendingBot) sendLendingNotification(credits []*bitfinex.FundingCredit)
 		message += fmt.Sprintf("📊 訂單 #%d\n", i+1)
 		message += fmt.Sprintf("💵 金額: %.2f %s\n", credit.Amount, lb.config.Currency)
 		message += fmt.Sprintf("📈 日利率: %.4f%%\n", lb.rateConverter.DecimalToPercentage(credit.Rate))
-		message += fmt.Sprintf("📈 年利率: %.4f%%\n", lb.rateConverter.DecimalToPercentage(credit.Rate)*365)
+		message += fmt.Sprintf("📈 年利率: %.4f%%\n", lb.rateConverter.DecimalToPercentage(credit.Rate)*constants.DaysPerYear)
 		message += fmt.Sprintf("⏰ 期間: %d 天\n", credit.Period)
 		message += fmt.Sprintf("💰 預期收益: %.4f %s\n", periodEarnings, lb.config.Currency)
 		message += fmt.Sprintf("🕐 開始時間: %s\n", openTime.Format("2006-01-02 15:04:05"))
