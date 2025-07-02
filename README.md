@@ -78,6 +78,7 @@ ENABLE_SMART_STRATEGY: true          # 啟用智能策略
 VOLATILITY_THRESHOLD: 0.002          # 市場波動閾值
 MAX_RATE_MULTIPLIER: 2.0            # 最大利率倍數
 MIN_RATE_MULTIPLIER: 0.8            # 最小利率倍數
+RATE_RANGE_INCREASE_PERCENT: 0.2    # 利率範圍增加百分比 (0.2 = 20%)
 ```
 
 ### 📱 通知設定
@@ -114,6 +115,7 @@ RESERVE_AMOUNT: 100                  # 保留金額
 /highholdrate [數值]               - 高額持有利率
 /highholdamount [數值]             - 高額持有金額
 /highholdorders [數值]             - 高額持有訂單數
+/raterangeincrease [數值]          - 利率範圍增加百分比
 ```
 
 ### 🔧 控制指令

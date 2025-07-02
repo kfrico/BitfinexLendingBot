@@ -219,6 +219,33 @@ func (b *Bot) handleSetHighHoldOrders(chatID int64, text string) {
 	b.sendMessage(chatID, fmt.Sprintf("高額持有訂單數量已設定為: %d", orders))
 }
 
+// handleSetRateRangeIncrease 處理設置利率範圍增加百分比指令
+func (b *Bot) handleSetRateRangeIncrease(chatID int64, text string) {
+	parts := strings.Split(text, " ")
+	if len(parts) != 2 {
+		b.sendMessage(chatID, "格式錯誤，請使用 /raterangeincrease [數值] 格式")
+		return
+	}
+
+	percentage, err := strconv.ParseFloat(parts[1], 64)
+	if err != nil || percentage <= 0 {
+		b.sendMessage(chatID, "請輸入有效的正數值")
+		return
+	}
+
+	// 驗證範圍 (0-100%)
+	if percentage > 100.0 {
+		b.sendMessage(chatID, "利率範圍增加百分比不能超過 100%")
+		return
+	}
+
+	// 轉換為小數形式 (0-1.0)
+	decimalValue := percentage / 100.0
+	
+	b.config.RateRangeIncreasePercent = decimalValue
+	b.sendMessage(chatID, fmt.Sprintf("利率範圍增加百分比已設定為: %.2f%% (%.4f)", percentage, decimalValue))
+}
+
 // handleRestart 處理重啟指令
 func (b *Bot) handleRestart(chatID int64) {
 	b.sendMessage(chatID, "🔄 開始手動重啟...")
@@ -254,6 +281,7 @@ func (b *Bot) handleStrategyStatus(chatID int64) {
 		statusMsg += fmt.Sprintf("\n波動率閾值: %.4f", b.config.VolatilityThreshold)
 		statusMsg += fmt.Sprintf("\n最大利率倍數: %.1fx", b.config.MaxRateMultiplier)
 		statusMsg += fmt.Sprintf("\n最小利率倍數: %.1fx", b.config.MinRateMultiplier)
+		statusMsg += fmt.Sprintf("\n利率範圍增加: %.1f%%", b.config.RateRangeIncreasePercent*100)
 
 		// 添加建議值提示
 		statusMsg += fmt.Sprintf("\n\n📋 參數建議值:")

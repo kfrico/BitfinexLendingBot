@@ -36,11 +36,11 @@ const (
 
 // Telegram 相關常量
 const (
-	TelegramCommandPrefix  = "/"
-	MaxMessageLength       = 4096
-	TelegramRetryDelay     = 3 * time.Second
-	TelegramUpdateTimeout  = 60 * time.Second
-	MaxConcurrentMessages  = 10
+	TelegramCommandPrefix = "/"
+	MaxMessageLength      = 4096
+	TelegramRetryDelay    = 3 * time.Second
+	TelegramUpdateTimeout = 60 * time.Second
+	MaxConcurrentMessages = 10
 )
 
 // 智能策略預設值
@@ -60,9 +60,9 @@ const (
 
 // 顯示和處理限制
 const (
-	MaxDisplayOrders        = 5    // 最多顯示的訂單數量
-	SmallRateChangePercent  = 0.01 // 1% 小變化閾值
-	RateRangeIncreasePercent = 0.05 // 5% 利率範圍增加
-	MaxHistorySize          = 100  // 最大歷史記錄大小
-	ReducedSplitsMultiplier = 0.7  // 高波動時分割數減少倍數
+	MaxDisplayOrders         = 5    // 最多顯示的訂單數量
+	SmallRateChangePercent   = 0.01 // 1% 小變化閾值
+	RateRangeIncreasePercent = 0.1  // 10% 利率範圍增加 (預設值，可在配置中覆蓋)
+	MaxHistorySize           = 100  // 最大歷史記錄大小
+	ReducedSplitsMultiplier  = 0.7  // 高波動時分割數減少倍數
 )

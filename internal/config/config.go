@@ -46,10 +46,11 @@ type Config struct {
 	ReserveAmount       float64 `mapstructure:"RESERVE_AMOUNT"`
 
 	// 智能策略設定
-	EnableSmartStrategy bool    `mapstructure:"ENABLE_SMART_STRATEGY"`
-	VolatilityThreshold float64 `mapstructure:"VOLATILITY_THRESHOLD"`
-	MaxRateMultiplier   float64 `mapstructure:"MAX_RATE_MULTIPLIER"`
-	MinRateMultiplier   float64 `mapstructure:"MIN_RATE_MULTIPLIER"`
+	EnableSmartStrategy      bool    `mapstructure:"ENABLE_SMART_STRATEGY"`
+	VolatilityThreshold      float64 `mapstructure:"VOLATILITY_THRESHOLD"`
+	MaxRateMultiplier        float64 `mapstructure:"MAX_RATE_MULTIPLIER"`
+	MinRateMultiplier        float64 `mapstructure:"MIN_RATE_MULTIPLIER"`
+	RateRangeIncreasePercent float64 `mapstructure:"RATE_RANGE_INCREASE_PERCENT"` // 利率範圍增加百分比
 
 	// 測試模式設定
 	TestMode bool `mapstructure:"TEST_MODE"`
@@ -127,6 +128,9 @@ func (c *Config) Validate() error {
 		if c.MinRateMultiplier >= c.MaxRateMultiplier {
 			return errors.NewValidationError("MIN_RATE_MULTIPLIER must be less than MAX_RATE_MULTIPLIER")
 		}
+		if c.RateRangeIncreasePercent <= 0 || c.RateRangeIncreasePercent > 1.0 {
+			return errors.NewValidationError("RATE_RANGE_INCREASE_PERCENT must be between 0 and 1.0 (0-100%)")
+		}
 	}
 
 	// 驗證借貸檢查間隔
@@ -175,6 +179,9 @@ func (c *Config) setSmartStrategyDefaults() {
 		if c.MinRateMultiplier == 0 {
 			c.MinRateMultiplier = constants.DefaultMinRateMultiplier
 		}
+		if c.RateRangeIncreasePercent == 0 {
+			c.RateRangeIncreasePercent = constants.RateRangeIncreasePercent
+		}
 	} else {
 		// 如果智能策略未啟用，確保參數有預設值以防止驗證錯誤
 		if c.VolatilityThreshold == 0 {
@@ -185,6 +192,9 @@ func (c *Config) setSmartStrategyDefaults() {
 		}
 		if c.MinRateMultiplier == 0 {
 			c.MinRateMultiplier = constants.DefaultMinRateMultiplier
+		}
+		if c.RateRangeIncreasePercent == 0 {
+			c.RateRangeIncreasePercent = constants.RateRangeIncreasePercent
 		}
 	}
 }

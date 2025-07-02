@@ -218,6 +218,8 @@ func (b *Bot) handleCommand(chatID int64, text string) {
 		b.handleSetHighHoldAmount(chatID, text)
 	case strings.HasPrefix(text, "/highholdorders "):
 		b.handleSetHighHoldOrders(chatID, text)
+	case strings.HasPrefix(text, "/raterangeincrease "):
+		b.handleSetRateRangeIncrease(chatID, text)
 	case text == "/strategy":
 		b.handleStrategyStatus(chatID)
 	case text == "/smartstrategy on":
@@ -243,6 +245,7 @@ func (b *Bot) handleHelp(chatID int64) {
 /highholdrate [數值] - 設置高額持有策略的日利率
 /highholdamount [數值] - 設置高額持有策略的金額
 /highholdorders [數值] - 設置高額持有策略的訂單數量
+/raterangeincrease [數值] - 設置利率範圍增加百分比 (0-100%)
 /strategy - 顯示當前策略狀態
 /smartstrategy on - 啟用智能策略
 /smartstrategy off - 停用智能策略

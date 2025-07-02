@@ -30,6 +30,7 @@ ENABLE_SMART_STRATEGY: true #啟用智能策略
 VOLATILITY_THRESHOLD: 0.002     # 高波動閾值 (預設: 0.002)
 MAX_RATE_MULTIPLIER: 2.0        # 最大利率倍數 (預設: 2.0)
 MIN_RATE_MULTIPLIER: 0.8        # 最小利率倍數 (預設: 0.8)
+RATE_RANGE_INCREASE_PERCENT: 0.2 # 利率範圍增加百分比 (預設: 0.2 = 20%)
 
 LENDING_CHECK_MINUTES: 5 #每隔五分鐘檢查是否有成功借貸的訂單
 TEST_MODE: true
