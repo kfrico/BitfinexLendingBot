@@ -73,7 +73,7 @@ func (b *Bot) StartWithContext(ctx context.Context) {
 		updates, err := b.api.GetUpdatesChan(u)
 		if err != nil {
 			log.Printf("Failed to get updates, retrying in %v: %v", constants.TelegramRetryDelay, err)
-			
+
 			// 使用 context 支持的 sleep
 			select {
 			case <-ctx.Done():
@@ -95,7 +95,7 @@ func (b *Bot) StartWithContext(ctx context.Context) {
 					log.Printf("Update channel closed, retrying in %v...", constants.TelegramRetryDelay)
 					goto retry
 				}
-				
+
 				if update.Message == nil {
 					continue
 				}
@@ -226,6 +226,10 @@ func (b *Bot) handleCommand(chatID int64, text string) {
 		b.handleToggleSmartStrategy(chatID, true)
 	case text == "/smartstrategy off":
 		b.handleToggleSmartStrategy(chatID, false)
+	case text == "/klinestrategy on":
+		b.handleToggleKlineStrategy(chatID, true)
+	case text == "/klinestrategy off":
+		b.handleToggleKlineStrategy(chatID, false)
 	case text == "/lending":
 		b.handleLendingCredits(chatID)
 	default:
@@ -236,8 +240,15 @@ func (b *Bot) handleCommand(chatID int64, text string) {
 // handleHelp 處理幫助指令
 func (b *Bot) handleHelp(chatID int64) {
 	helpText := `可用指令:
+
+📊 查詢指令:
 /rate - 顯示當前貸出利率和閾值
 /check - 檢查貸出利率是否超過閾值
+/status - 顯示系統狀態
+/strategy - 顯示當前策略狀態
+/lending - 查看當前活躍的借貸訂單
+
+⚙️ 設置指令:
 /threshold [數值] - 設置利率通知閾值
 /reserve [數值] - 設置不參與借貸的保留金額
 /orderlimit [數值] - 設置單次執行最大下單數量限制
@@ -246,13 +257,18 @@ func (b *Bot) handleHelp(chatID int64) {
 /highholdamount [數值] - 設置高額持有策略的金額
 /highholdorders [數值] - 設置高額持有策略的訂單數量
 /raterangeincrease [數值] - 設置利率範圍增加百分比 (0-100%)
-/strategy - 顯示當前策略狀態
-/smartstrategy on - 啟用智能策略
+
+🧠 策略指令:
+/klinestrategy on - 啟用K線策略 (最高優先級)
+/klinestrategy off - 停用K線策略
+/smartstrategy on - 啟用智能策略 (中等優先級)
 /smartstrategy off - 停用智能策略
-/lending - 查看當前活躍的借貸訂單
-/status - 顯示系統狀態
+
+🔄 控制指令:
+/restart - 手動重新啟動，清除所有訂單，重新運行
 /help - 顯示此幫助訊息
-/restart - 手動重新啟動，清除所有訂單，重新運行`
+
+💡 策略優先級: K線策略 > 智能策略 > 傳統策略`
 
 	b.sendMessage(chatID, helpText)
 }

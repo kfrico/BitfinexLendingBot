@@ -27,7 +27,7 @@ type Application struct {
 	telegramBot   *telegram.Bot
 	lendingBot    *strategy.LendingBot
 	rateConverter *rates.Converter
-	
+
 	// 併發控制
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -159,7 +159,7 @@ func (app *Application) runWorker(name string, worker func()) {
 			// 可以在這裡添加重啟邏輯
 		}
 	}()
-	
+
 	log.Printf("啟動工作任務: %s", name)
 	worker()
 	log.Printf("工作任務 %s 已結束", name)
@@ -168,28 +168,27 @@ func (app *Application) runWorker(name string, worker func()) {
 // shutdown 優雅關閉應用程式
 func (app *Application) shutdown() error {
 	log.Println("正在關閉應用程式...")
-	
+
 	// 取消 context
 	app.cancel()
-	
+
 	// 等待所有 goroutines 結束，設置超時
 	done := make(chan struct{})
 	go func() {
 		app.wg.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		log.Println("所有工作任務已優雅結束")
 	case <-time.After(constants.ShutdownTimeout):
 		log.Println("等待超時，強制結束")
 	}
-	
+
 	log.Println("應用程式已關閉")
 	return nil
 }
-
 
 // scheduleMainTask 調度主要任務
 func (app *Application) scheduleMainTask() {

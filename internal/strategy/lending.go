@@ -86,7 +86,10 @@ func (lb *LendingBot) Execute() error {
 
 	// 根據配置選擇策略
 	var loanOffers []*LoanOffer
-	if lb.config.EnableSmartStrategy {
+	if lb.config.EnableKlineStrategy {
+		log.Println("使用K線策略計算貸出訂單...")
+		loanOffers = lb.calculateKlineOffers(fundsAvailable)
+	} else if lb.config.EnableSmartStrategy {
 		log.Println("使用智能策略計算貸出訂單...")
 		loanOffers = lb.smartStrategy.CalculateSmartOffers(fundsAvailable, fundingBook)
 	} else {
@@ -454,4 +457,129 @@ func (lb *LendingBot) sendLendingNotification(credits []*bitfinex.FundingCredit)
 // GetActiveLendingCredits 獲取活躍借貸訂單（供 Telegram 指令使用）
 func (lb *LendingBot) GetActiveLendingCredits() ([]*bitfinex.FundingCredit, error) {
 	return lb.client.GetFundingCredits(lb.config.GetFundingSymbol())
+}
+
+// calculateKlineOffers 基於K線數據計算貸出訂單
+func (lb *LendingBot) calculateKlineOffers(fundsAvailable float64) []*LoanOffer {
+	var loanOffers []*LoanOffer
+
+	// 檢查可用資金
+	if fundsAvailable < lb.config.MinLoan {
+		return loanOffers
+	}
+
+	// 獲取K線數據
+	candles, _ := lb.client.GetFundingCandles(
+		lb.config.GetFundingSymbol(),
+		lb.config.KlineTimeFrame,
+		lb.config.KlinePeriod,
+	)
+
+	// 找到最近期間內的最高利率
+	highestRate := lb.findHighestRateFromCandles(candles)
+	log.Printf("K線數據分析：最高利率 %.6f%%", lb.rateConverter.DecimalToPercentage(highestRate))
+
+	// 計算目標利率（最高利率 + 加成）
+	spreadMultiplier := 1.0 + (lb.config.KlineSpreadPercent / 100.0)
+	targetRate := highestRate * spreadMultiplier
+
+	// 確保不低於最小利率
+	minDailyRate := lb.config.GetMinDailyRateDecimal()
+	if targetRate < minDailyRate {
+		targetRate = minDailyRate
+		log.Printf("目標利率低於最小利率，使用最小利率: %.6f%%", lb.rateConverter.DecimalToPercentage(targetRate))
+	}
+
+	log.Printf("K線策略目標利率: %.6f%% (加成: %.1f%%)",
+		lb.rateConverter.DecimalToPercentage(targetRate),
+		lb.config.KlineSpreadPercent)
+
+	splitFundsAvailable := fundsAvailable
+
+	// 高額持有策略
+	if lb.config.HighHoldAmount > lb.config.MinLoan {
+		highHoldOffers := lb.calculateHighHoldOffers(&splitFundsAvailable)
+		loanOffers = append(loanOffers, highHoldOffers...)
+	}
+
+	// 使用目標利率創建分散訂單
+	if splitFundsAvailable >= lb.config.MinLoan {
+		klineOffers := lb.calculateKlineSpreadOffers(splitFundsAvailable, targetRate)
+		loanOffers = append(loanOffers, klineOffers...)
+	}
+
+	return loanOffers
+}
+
+// findHighestRateFromCandles 從K線數據中找到最高利率
+func (lb *LendingBot) findHighestRateFromCandles(candles []*bitfinex.Candle) float64 {
+	if len(candles) == 0 {
+		return lb.config.GetMinDailyRateDecimal()
+	}
+
+	highestRate := candles[0].High
+	for _, candle := range candles {
+		if candle.High > highestRate {
+			highestRate = candle.High
+		}
+	}
+
+	return highestRate
+}
+
+// calculateKlineSpreadOffers 基於K線目標利率計算分散訂單
+func (lb *LendingBot) calculateKlineSpreadOffers(fundsAvailable float64, targetRate float64) []*LoanOffer {
+	var offers []*LoanOffer
+
+	numSplits := lb.config.SpreadLend
+	if numSplits <= 0 || fundsAvailable < lb.config.MinLoan {
+		return offers
+	}
+
+	// 計算每筆金額
+	amtEach := fundsAvailable / float64(numSplits)
+	amtEach = float64(int64(amtEach*100)) / 100.0
+
+	// 調整分割數
+	for amtEach <= lb.config.MinLoan && numSplits > 1 {
+		numSplits--
+		amtEach = fundsAvailable / float64(numSplits)
+		amtEach = float64(int64(amtEach*100)) / 100.0
+	}
+	if numSplits <= 0 {
+		return offers
+	}
+
+	// 創建訂單，使用目標利率為基準，微調以分散風險
+	for i := 0; i < numSplits; i++ {
+		// 計算金額
+		allocAmount := amtEach
+		if lb.config.MaxLoan > 0 && allocAmount > lb.config.MaxLoan {
+			allocAmount = lb.config.MaxLoan
+		}
+
+		if allocAmount < lb.config.MinLoan {
+			break
+		}
+
+		rate := targetRate * (1 + (float64(i) * lb.config.RateRangeIncreasePercent))
+
+		// 確保利率不低於最小利率
+		minDailyRate := lb.config.GetMinDailyRateDecimal()
+		if rate < minDailyRate {
+			rate = minDailyRate
+		}
+
+		// 計算期間
+		period := lb.calculatePeriod(rate)
+
+		offer := &LoanOffer{
+			Amount: allocAmount,
+			Rate:   rate,
+			Period: period,
+		}
+		offers = append(offers, offer)
+	}
+
+	return offers
 }

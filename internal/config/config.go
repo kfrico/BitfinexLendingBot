@@ -52,6 +52,12 @@ type Config struct {
 	MinRateMultiplier        float64 `mapstructure:"MIN_RATE_MULTIPLIER"`
 	RateRangeIncreasePercent float64 `mapstructure:"RATE_RANGE_INCREASE_PERCENT"` // 利率範圍增加百分比
 
+	// K線策略設定
+	EnableKlineStrategy bool    `mapstructure:"ENABLE_KLINE_STRATEGY"` // 啟用K線策略
+	KlineTimeFrame      string  `mapstructure:"KLINE_TIME_FRAME"`      // K線時間框架，預設15m
+	KlinePeriod         int     `mapstructure:"KLINE_PERIOD"`          // K線週期數量，預設24（6小時）
+	KlineSpreadPercent  float64 `mapstructure:"KLINE_SPREAD_PERCENT"`  // K線最高點加成百分比，預設0%
+
 	// 測試模式設定
 	TestMode bool `mapstructure:"TEST_MODE"`
 
@@ -76,6 +82,9 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// 設置智能策略參數的預設值
 	config.setSmartStrategyDefaults()
+
+	// 設置K線策略參數的預設值
+	config.setKlineStrategyDefaults()
 
 	// 設置借貸檢查間隔的預設值
 	config.setLendingCheckDefaults()
@@ -130,6 +139,19 @@ func (c *Config) Validate() error {
 		}
 		if c.RateRangeIncreasePercent <= 0 || c.RateRangeIncreasePercent > 1.0 {
 			return errors.NewValidationError("RATE_RANGE_INCREASE_PERCENT must be between 0 and 1.0 (0-100%)")
+		}
+	}
+
+	// 驗證K線策略參數
+	if c.EnableKlineStrategy {
+		if c.KlineTimeFrame == "" {
+			return errors.NewValidationError("KLINE_TIME_FRAME is required when ENABLE_KLINE_STRATEGY is true")
+		}
+		if c.KlinePeriod <= 0 {
+			return errors.NewValidationError("KLINE_PERIOD must be positive")
+		}
+		if c.KlineSpreadPercent < 0 || c.KlineSpreadPercent > 100 {
+			return errors.NewValidationError("KLINE_SPREAD_PERCENT must be between 0 and 100")
 		}
 	}
 
@@ -195,6 +217,22 @@ func (c *Config) setSmartStrategyDefaults() {
 		}
 		if c.RateRangeIncreasePercent == 0 {
 			c.RateRangeIncreasePercent = constants.RateRangeIncreasePercent
+		}
+	}
+}
+
+// setKlineStrategyDefaults 設置K線策略參數的預設值
+func (c *Config) setKlineStrategyDefaults() {
+	// 如果K線策略啟用但參數為空，設置預設值
+	if c.EnableKlineStrategy {
+		if c.KlineTimeFrame == "" {
+			c.KlineTimeFrame = "15m"
+		}
+		if c.KlinePeriod == 0 {
+			c.KlinePeriod = 24 // 6小時的15分鐘K線
+		}
+		if c.KlineSpreadPercent == 0 {
+			c.KlineSpreadPercent = 0.0 // 0%加成
 		}
 	}
 }

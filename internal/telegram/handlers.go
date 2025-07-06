@@ -241,7 +241,7 @@ func (b *Bot) handleSetRateRangeIncrease(chatID int64, text string) {
 
 	// 轉換為小數形式 (0-1.0)
 	decimalValue := percentage / 100.0
-	
+
 	b.config.RateRangeIncreasePercent = decimalValue
 	b.sendMessage(chatID, fmt.Sprintf("利率範圍增加百分比已設定為: %.2f%% (%.4f)", percentage, decimalValue))
 }
@@ -268,15 +268,72 @@ func (b *Bot) handleRestart(chatID int64) {
 // handleStrategyStatus 處理策略狀態查詢指令
 func (b *Bot) handleStrategyStatus(chatID int64) {
 	var strategyType string
-	if b.config.EnableSmartStrategy {
+	var strategyPriority string
+
+	// 根據策略優先級確定當前啟用的策略
+	if b.config.EnableKlineStrategy {
+		strategyType = "K線策略 (啟用)"
+		strategyPriority = "最高優先級"
+	} else if b.config.EnableSmartStrategy {
 		strategyType = "智能策略 (啟用)"
+		strategyPriority = "中等優先級"
 	} else {
 		strategyType = "傳統策略 (啟用)"
+		strategyPriority = "預設策略"
 	}
 
-	statusMsg := fmt.Sprintf("📊 當前策略狀態\n策略類型: %s", strategyType)
+	statusMsg := fmt.Sprintf("📊 當前策略狀態\n策略類型: %s\n優先級: %s", strategyType, strategyPriority)
 
-	if b.config.EnableSmartStrategy {
+	// K線策略設定
+	if b.config.EnableKlineStrategy {
+		statusMsg += fmt.Sprintf("\n\n📈 K線策略設定:")
+		statusMsg += fmt.Sprintf("\n時間框架: %s", b.config.KlineTimeFrame)
+		statusMsg += fmt.Sprintf("\nK線週期數: %d", b.config.KlinePeriod)
+		statusMsg += fmt.Sprintf("\n加成百分比: %.1f%%", b.config.KlineSpreadPercent)
+
+		// 計算分析時間範圍
+		var timeRange string
+		switch b.config.KlineTimeFrame {
+		case "5m":
+			minutes := float64(b.config.KlinePeriod) * 5
+			timeRange = fmt.Sprintf("%.1f分鐘", minutes)
+		case "15m":
+			hours := float64(b.config.KlinePeriod) * 0.25
+			timeRange = fmt.Sprintf("%.1f小時", hours)
+		case "30m":
+			hours := float64(b.config.KlinePeriod) * 0.5
+			timeRange = fmt.Sprintf("%.1f小時", hours)
+		case "1h":
+			timeRange = fmt.Sprintf("%d小時", b.config.KlinePeriod)
+		case "3h":
+			hours := b.config.KlinePeriod * 3
+			timeRange = fmt.Sprintf("%d小時", hours)
+		case "6h":
+			hours := b.config.KlinePeriod * 6
+			timeRange = fmt.Sprintf("%d小時", hours)
+		case "12h":
+			days := float64(b.config.KlinePeriod) * 0.5
+			timeRange = fmt.Sprintf("%.1f天", days)
+		case "1D":
+			timeRange = fmt.Sprintf("%d天", b.config.KlinePeriod)
+		default:
+			timeRange = "未知"
+		}
+		statusMsg += fmt.Sprintf("\n分析時間範圍: %s", timeRange)
+
+		statusMsg += fmt.Sprintf("\n\nK線策略功能:")
+		statusMsg += fmt.Sprintf("\n✅ 基於真實市場K線數據")
+		statusMsg += fmt.Sprintf("\n✅ 自動找尋最高利率")
+		statusMsg += fmt.Sprintf("\n✅ 智能加成計算")
+		statusMsg += fmt.Sprintf("\n✅ 分散風險貸出")
+		statusMsg += fmt.Sprintf("\n✅ 自動回退機制")
+
+		// 添加策略建議
+		statusMsg += fmt.Sprintf("\n\n📋 時間框架建議:")
+		statusMsg += fmt.Sprintf("\n⚡ 短期: 15m-30m (快速反應)")
+		statusMsg += fmt.Sprintf("\n⚖️ 中期: 1h-3h (平衡策略)")
+		statusMsg += fmt.Sprintf("\n🛡️ 長期: 6h-1D (穩定策略)")
+	} else if b.config.EnableSmartStrategy {
 		statusMsg += fmt.Sprintf("\n\n🧠 智能策略設定:")
 		statusMsg += fmt.Sprintf("\n波動率閾值: %.4f", b.config.VolatilityThreshold)
 		statusMsg += fmt.Sprintf("\n最大利率倍數: %.1fx", b.config.MaxRateMultiplier)
@@ -302,9 +359,25 @@ func (b *Bot) handleStrategyStatus(chatID int64) {
 		statusMsg += fmt.Sprintf("\n固定期間選擇邏輯")
 	}
 
-	statusMsg += fmt.Sprintf("\n\n💡 提示: 使用 /smartstrategy on/off 切換策略")
+	// 顯示策略優先級順序
+	statusMsg += fmt.Sprintf("\n\n🔄 策略優先級順序:")
+	statusMsg += fmt.Sprintf("\n1️⃣ K線策略 (%s)", getStrategyStatus(b.config.EnableKlineStrategy))
+	statusMsg += fmt.Sprintf("\n2️⃣ 智能策略 (%s)", getStrategyStatus(b.config.EnableSmartStrategy))
+	statusMsg += fmt.Sprintf("\n3️⃣ 傳統策略 (預設)")
+
+	statusMsg += fmt.Sprintf("\n\n💡 提示: 使用指令切換策略")
+	statusMsg += fmt.Sprintf("\n/klinestrategy on/off - 切換K線策略")
+	statusMsg += fmt.Sprintf("\n/smartstrategy on/off - 切換智能策略")
 
 	b.sendMessage(chatID, statusMsg)
+}
+
+// getStrategyStatus 獲取策略狀態文字
+func getStrategyStatus(enabled bool) string {
+	if enabled {
+		return "啟用"
+	}
+	return "停用"
 }
 
 // handleToggleSmartStrategy 處理智能策略切換指令
@@ -313,9 +386,46 @@ func (b *Bot) handleToggleSmartStrategy(chatID int64, enable bool) {
 
 	var message string
 	if enable {
-		message = "✅ 智能策略已啟用\n\n智能功能:\n🧠 動態利率調整\n📈 市場趨勢分析\n⏰ 智能期間選擇\n🏆 競爭對手分析\n💰 自適應資金配置\n\n下次執行時將使用智能策略"
+		// 如果啟用智能策略，自動關閉K線策略
+		b.config.EnableKlineStrategy = false
+
+		message = "✅ 智能策略已啟用\n\n智能功能:\n🧠 動態利率調整\n📈 市場趨勢分析\n⏰ 智能期間選擇\n🏆 競爭對手分析\n💰 自適應資金配置\n\nK線策略已自動停用\n下次執行時將使用智能策略"
 	} else {
-		message = "❌ 智能策略已停用\n\n已切換回傳統策略:\n⚙️ 固定參數配置\n📊 傳統分散邏輯\n\n下次執行時將使用傳統策略"
+		message = "❌ 智能策略已停用\n\n已切換回其他策略:\n"
+		if b.config.EnableKlineStrategy {
+			message += "📈 K線策略 (已啟用)\n"
+		} else {
+			message += "⚙️ 傳統策略 (預設)\n"
+		}
+		message += "\n下次執行時將使用相應策略"
+	}
+
+	b.sendMessage(chatID, message)
+}
+
+// handleToggleKlineStrategy 處理K線策略切換指令
+func (b *Bot) handleToggleKlineStrategy(chatID int64, enable bool) {
+	b.config.EnableKlineStrategy = enable
+
+	var message string
+	if enable {
+		// 如果啟用K線策略，自動關閉智能策略
+		b.config.EnableSmartStrategy = false
+
+		message = "✅ K線策略已啟用\n\n📈 K線策略功能:\n🎯 基於真實市場K線數據\n📊 自動找尋最高利率\n💡 智能加成計算\n🔄 分散風險貸出\n🛡️ 自動回退機制\n\n"
+		message += fmt.Sprintf("⚙️ 當前設定:\n")
+		message += fmt.Sprintf("時間框架: %s\n", b.config.KlineTimeFrame)
+		message += fmt.Sprintf("K線週期: %d\n", b.config.KlinePeriod)
+		message += fmt.Sprintf("加成百分比: %.1f%%\n", b.config.KlineSpreadPercent)
+		message += "\n智能策略已自動停用\n下次執行時將使用K線策略"
+	} else {
+		message = "❌ K線策略已停用\n\n已切換回其他策略:\n"
+		if b.config.EnableSmartStrategy {
+			message += "🧠 智能策略 (已啟用)\n"
+		} else {
+			message += "⚙️ 傳統策略 (預設)\n"
+		}
+		message += "\n下次執行時將使用相應策略"
 	}
 
 	b.sendMessage(chatID, message)

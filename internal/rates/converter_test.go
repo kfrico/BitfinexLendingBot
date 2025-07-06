@@ -166,7 +166,7 @@ func TestConverter_Consistency(t *testing.T) {
 			// decimal -> percentage -> decimal
 			percentage := converter.DecimalToPercentage(value)
 			backToDecimal := converter.PercentageToDecimal(percentage)
-			
+
 			if math.Abs(value-backToDecimal) > 1e-9 {
 				t.Errorf("Inconsistent conversion: %f -> %f -> %f", value, percentage, backToDecimal)
 			}
@@ -176,7 +176,7 @@ func TestConverter_Consistency(t *testing.T) {
 			// daily -> annual -> daily
 			annual := converter.DailyToAnnual(value)
 			backToDaily := converter.AnnualToDaily(annual)
-			
+
 			if math.Abs(value-backToDaily) > 1e-9 {
 				t.Errorf("Inconsistent conversion: %f -> %f -> %f", value, annual, backToDaily)
 			}

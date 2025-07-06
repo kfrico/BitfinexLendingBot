@@ -13,17 +13,17 @@ func TestSmartStrategy_CalculateOptimalAllocation(t *testing.T) {
 	})
 
 	tests := []struct {
-		name              string
-		condition         *MarketCondition
-		expectedHighHold  float64
-		expectedSpread    float64
+		name             string
+		condition        *MarketCondition
+		expectedHighHold float64
+		expectedSpread   float64
 	}{
 		{
 			name: "rising trend",
 			condition: &MarketCondition{
-				Trend:       "rising",
-				Volatility:  0.001,
-				RateRatio:   1.0,
+				Trend:      "rising",
+				Volatility: 0.001,
+				RateRatio:  1.0,
 			},
 			expectedHighHold: 0.3,
 			expectedSpread:   0.7,
@@ -31,9 +31,9 @@ func TestSmartStrategy_CalculateOptimalAllocation(t *testing.T) {
 		{
 			name: "falling trend",
 			condition: &MarketCondition{
-				Trend:       "falling",
-				Volatility:  0.001,
-				RateRatio:   1.0,
+				Trend:      "falling",
+				Volatility: 0.001,
+				RateRatio:  1.0,
 			},
 			expectedHighHold: 0.7,
 			expectedSpread:   0.3,
@@ -41,9 +41,9 @@ func TestSmartStrategy_CalculateOptimalAllocation(t *testing.T) {
 		{
 			name: "stable trend",
 			condition: &MarketCondition{
-				Trend:       "stable",
-				Volatility:  0.001,
-				RateRatio:   1.0,
+				Trend:      "stable",
+				Volatility: 0.001,
+				RateRatio:  1.0,
 			},
 			expectedHighHold: 0.5,
 			expectedSpread:   0.5,
@@ -51,9 +51,9 @@ func TestSmartStrategy_CalculateOptimalAllocation(t *testing.T) {
 		{
 			name: "high volatility",
 			condition: &MarketCondition{
-				Trend:       "stable",
-				Volatility:  0.003, // 高於閾值
-				RateRatio:   1.0,
+				Trend:      "stable",
+				Volatility: 0.003, // 高於閾值
+				RateRatio:  1.0,
 			},
 			expectedHighHold: 0.6, // 0.5 + 0.1
 			expectedSpread:   0.4,
@@ -61,9 +61,9 @@ func TestSmartStrategy_CalculateOptimalAllocation(t *testing.T) {
 		{
 			name: "high rate ratio",
 			condition: &MarketCondition{
-				Trend:       "stable",
-				Volatility:  0.001,
-				RateRatio:   1.3, // 高於 1.2
+				Trend:      "stable",
+				Volatility: 0.001,
+				RateRatio:  1.3, // 高於 1.2
 			},
 			expectedHighHold: 0.6, // 0.5 + 0.1
 			expectedSpread:   0.4,
@@ -73,7 +73,7 @@ func TestSmartStrategy_CalculateOptimalAllocation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			highHold, spread := strategy.calculateOptimalAllocation(tt.condition)
-			
+
 			if highHold != tt.expectedHighHold {
 				t.Errorf("Expected highHold %f, got %f", tt.expectedHighHold, highHold)
 			}
@@ -91,9 +91,9 @@ func TestSmartStrategy_CalculateProgressiveRate(t *testing.T) {
 	})
 
 	condition := &MarketCondition{
-		Trend:     "stable",
+		Trend:      "stable",
 		Volatility: 0.001,
-		AvgRate:   0.0003,
+		AvgRate:    0.0003,
 	}
 
 	tests := []struct {
@@ -106,8 +106,8 @@ func TestSmartStrategy_CalculateProgressiveRate(t *testing.T) {
 		expectMax    float64
 	}{
 		{
-			name: "empty funding book",
-			fundingBook: []*bitfinex.FundingBookEntry{},
+			name:         "empty funding book",
+			fundingBook:  []*bitfinex.FundingBookEntry{},
 			minDailyRate: 0.0002,
 			orderIndex:   0,
 			totalOrders:  3,
@@ -143,7 +143,7 @@ func TestSmartStrategy_CalculateProgressiveRate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rate := strategy.calculateProgressiveRate(tt.fundingBook, tt.minDailyRate, condition, tt.orderIndex, tt.totalOrders)
-			
+
 			if rate < tt.expectMin {
 				t.Errorf("Rate %f is below expected minimum %f", rate, tt.expectMin)
 			}
@@ -163,10 +163,10 @@ func TestSmartStrategy_CalculateSmartPeriod(t *testing.T) {
 	strategy := NewSmartStrategy(cfg)
 
 	tests := []struct {
-		name        string
-		dailyRate   float64
-		condition   *MarketCondition
-		expected    int
+		name      string
+		dailyRate float64
+		condition *MarketCondition
+		expected  int
 	}{
 		{
 			name:      "low rate stable market",
@@ -272,7 +272,7 @@ func TestSmartStrategy_CalculateSmartOffers(t *testing.T) {
 		{
 			name:           "sufficient funds for spread only",
 			fundsAvailable: 400.0, // 不足以做高額持有
-			expectedOffers: 2, // 只有 spread offers (400/3 約等於每筆133，少於150所以只能分2筆)
+			expectedOffers: 2,     // 只有 spread offers (400/3 約等於每筆133，少於150所以只能分2筆)
 		},
 	}
 

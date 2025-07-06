@@ -1,6 +1,9 @@
 package bitfinex
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/bitfinexcom/bitfinex-api-go/pkg/models/common"
@@ -58,6 +61,16 @@ type FundingCredit struct {
 	MTSCreated int64   // 創建時間戳（毫秒）
 	MTSOpened  int64   // 開始時間戳（毫秒）
 	Status     string  // 狀態
+}
+
+// Candle 代表 K 線數據
+type Candle struct {
+	MTS    int64   // 時間戳（毫秒）
+	Open   float64 // 開盤價
+	Close  float64 // 收盤價
+	High   float64 // 最高價
+	Low    float64 // 最低價
+	Volume float64 // 成交量
 }
 
 // GetFundingOffers 獲取未完成的資金貸出訂單
@@ -242,4 +255,81 @@ func (c *Client) GetFundingCredits(symbol string) ([]*FundingCredit, error) {
 	}
 
 	return result, nil
+}
+
+// GetFundingCandles 獲取資金 K 線數據
+func (c *Client) GetFundingCandles(symbol string, timeFrame string, limit int) ([]*Candle, error) {
+	// 構建 candle key，格式: trade:15m:fUSD:a30:p2:p30
+	candleKey := fmt.Sprintf("trade:%s:%s:a30:p2:p30", timeFrame, symbol)
+
+	// 構建 API URL
+	url := fmt.Sprintf("https://api-pub.bitfinex.com/v2/candles/%s/hist?limit=%d", candleKey, limit)
+
+	// 發送 HTTP 請求
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, errors.NewAPIError("failed to get funding candles", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.NewAPIError(fmt.Sprintf("API returned status code %d", resp.StatusCode), nil)
+	}
+
+	// 解析響應
+	var rawData [][]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&rawData); err != nil {
+		return nil, errors.NewAPIError("failed to decode candles response", err)
+	}
+
+	// 轉換為 Candle 結構
+	candles := make([]*Candle, 0, len(rawData))
+	for _, raw := range rawData {
+		if len(raw) != 6 {
+			continue // 跳過無效數據
+		}
+
+		// 安全地轉換每個字段
+		mts, ok := raw[0].(float64)
+		if !ok {
+			continue
+		}
+
+		open, ok := raw[1].(float64)
+		if !ok {
+			continue
+		}
+
+		close, ok := raw[2].(float64)
+		if !ok {
+			continue
+		}
+
+		high, ok := raw[3].(float64)
+		if !ok {
+			continue
+		}
+
+		low, ok := raw[4].(float64)
+		if !ok {
+			continue
+		}
+
+		volume, ok := raw[5].(float64)
+		if !ok {
+			continue
+		}
+
+		candle := &Candle{
+			MTS:    int64(mts),
+			Open:   open,
+			Close:  close,
+			High:   high,
+			Low:    low,
+			Volume: volume,
+		}
+		candles = append(candles, candle)
+	}
+
+	return candles, nil
 }
