@@ -517,14 +517,118 @@ func (lb *LendingBot) findHighestRateFromCandles(candles []*bitfinex.Candle) flo
 		return lb.config.GetMinDailyRateDecimal()
 	}
 
+	// 可以選擇不同的平滑方法：
+	// 1. 原始最高值（較激進）
+	// 2. 簡單移動平均（SMA）
+	// 3. 指數移動平均（EMA）
+	// 4. 高低點平均
+	// 5. 90百分位數
+
+	// 方法1: 原始最高值（目前的方法）
+	// return lb.findMaxRate(candles)
+
+	// 方法2: 收盤價的簡單移動平均（較保守）
+	// return lb.calculateSMA(candles)
+
+	// 方法3: 高點的指數移動平均（平滑且較敏感）
+	return lb.calculateEMAHigh(candles)
+
+	// 方法4: 高低點平均（平衡）
+	// return lb.calculateHighLowAverage(candles)
+
+	// 方法5: 90百分位數（避免極端值）
+	// return lb.calculate90Percentile(candles)
+}
+
+// findMaxRate 找到最高利率（原始方法）
+func (lb *LendingBot) findMaxRate(candles []*bitfinex.Candle) float64 {
 	highestRate := candles[0].High
 	for _, candle := range candles {
 		if candle.High > highestRate {
 			highestRate = candle.High
 		}
 	}
-
 	return highestRate
+}
+
+// calculateSMA 計算收盤價的簡單移動平均
+func (lb *LendingBot) calculateSMA(candles []*bitfinex.Candle) float64 {
+	if len(candles) == 0 {
+		return lb.config.GetMinDailyRateDecimal()
+	}
+
+	sum := 0.0
+	for _, candle := range candles {
+		sum += candle.Close
+	}
+	return sum / float64(len(candles))
+}
+
+// calculateEMAHigh 計算高點的指數移動平均
+func (lb *LendingBot) calculateEMAHigh(candles []*bitfinex.Candle) float64 {
+	if len(candles) == 0 {
+		return lb.config.GetMinDailyRateDecimal()
+	}
+
+	// EMA 係數，期間越長係數越小
+	alpha := 2.0 / (float64(len(candles)) + 1.0)
+	ema := candles[0].High
+
+	for i := 1; i < len(candles); i++ {
+		ema = alpha*candles[i].High + (1-alpha)*ema
+	}
+
+	return ema
+}
+
+// calculateHighLowAverage 計算高低點平均
+func (lb *LendingBot) calculateHighLowAverage(candles []*bitfinex.Candle) float64 {
+	if len(candles) == 0 {
+		return lb.config.GetMinDailyRateDecimal()
+	}
+
+	sumHigh := 0.0
+	sumLow := 0.0
+	for _, candle := range candles {
+		sumHigh += candle.High
+		sumLow += candle.Low
+	}
+
+	avgHigh := sumHigh / float64(len(candles))
+	avgLow := sumLow / float64(len(candles))
+
+	// 取高低點平均的平均（偏向高點一些）
+	return (avgHigh + avgLow) / 2.0
+}
+
+// calculate90Percentile 計算90百分位數
+func (lb *LendingBot) calculate90Percentile(candles []*bitfinex.Candle) float64 {
+	if len(candles) == 0 {
+		return lb.config.GetMinDailyRateDecimal()
+	}
+
+	// 收集所有高點
+	highs := make([]float64, len(candles))
+	for i, candle := range candles {
+		highs[i] = candle.High
+	}
+
+	// 簡單排序
+	for i := 0; i < len(highs); i++ {
+		for j := i + 1; j < len(highs); j++ {
+			if highs[i] > highs[j] {
+				highs[i], highs[j] = highs[j], highs[i]
+			}
+		}
+	}
+
+	// 計算90百分位數的索引
+	index := int(float64(len(highs)) * 0.9)
+	if index >= len(highs) {
+		index = len(highs) - 1
+	}
+
+	return highs[index]
 }
 
 // calculateKlineSpreadOffers 基於K線目標利率計算分散訂單
