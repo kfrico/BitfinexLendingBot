@@ -230,6 +230,8 @@ func (b *Bot) handleCommand(chatID int64, text string) {
 		b.handleToggleKlineStrategy(chatID, true)
 	case text == "/klinestrategy off":
 		b.handleToggleKlineStrategy(chatID, false)
+	case strings.HasPrefix(text, "/smoothmethod "):
+		b.handleSetSmoothMethod(chatID, text)
 	case text == "/lending":
 		b.handleLendingCredits(chatID)
 	default:
@@ -263,6 +265,7 @@ func (b *Bot) handleHelp(chatID int64) {
 /klinestrategy off - 停用K線策略
 /smartstrategy on - 啟用智能策略 (中等優先級)
 /smartstrategy off - 停用智能策略
+/smoothmethod [方法] - 設置K線利率平滑方法 (max/sma/ema/hla/p90)
 
 🔄 控制指令:
 /restart - 手動重新啟動，清除所有訂單，重新運行

@@ -517,27 +517,22 @@ func (lb *LendingBot) findHighestRateFromCandles(candles []*bitfinex.Candle) flo
 		return lb.config.GetMinDailyRateDecimal()
 	}
 
-	// 可以選擇不同的平滑方法：
-	// 1. 原始最高值（較激進）
-	// 2. 簡單移動平均（SMA）
-	// 3. 指數移動平均（EMA）
-	// 4. 高低點平均
-	// 5. 90百分位數
-
-	// 方法1: 原始最高值（目前的方法）
-	// return lb.findMaxRate(candles)
-
-	// 方法2: 收盤價的簡單移動平均（較保守）
-	// return lb.calculateSMA(candles)
-
-	// 方法3: 高點的指數移動平均（平滑且較敏感）
-	return lb.calculateEMAHigh(candles)
-
-	// 方法4: 高低點平均（平衡）
-	// return lb.calculateHighLowAverage(candles)
-
-	// 方法5: 90百分位數（避免極端值）
-	// return lb.calculate90Percentile(candles)
+	// 根據配置選擇平滑方法
+	switch lb.config.KlineSmoothMethod {
+	case "max":
+		return lb.findMaxRate(candles)
+	case "sma":
+		return lb.calculateSMA(candles)
+	case "ema":
+		return lb.calculateEMAHigh(candles)
+	case "hla":
+		return lb.calculateHighLowAverage(candles)
+	case "p90":
+		return lb.calculate90Percentile(candles)
+	default:
+		log.Printf("未知的平滑方法: %s，使用預設的 EMA", lb.config.KlineSmoothMethod)
+		return lb.calculateEMAHigh(candles)
+	}
 }
 
 // findMaxRate 找到最高利率（原始方法）

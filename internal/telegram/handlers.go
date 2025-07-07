@@ -291,6 +291,10 @@ func (b *Bot) handleStrategyStatus(chatID int64) {
 		statusMsg += fmt.Sprintf("\nK線週期數: %d", b.config.KlinePeriod)
 		statusMsg += fmt.Sprintf("\n加成百分比: %.1f%%", b.config.KlineSpreadPercent)
 
+		// 添加平滑方法信息
+		smoothMethodDesc := getSmoothMethodDescription(b.config.KlineSmoothMethod)
+		statusMsg += fmt.Sprintf("\n利率平滑方法: %s - %s", b.config.KlineSmoothMethod, smoothMethodDesc)
+
 		// 計算分析時間範圍
 		var timeRange string
 		switch b.config.KlineTimeFrame {
@@ -513,4 +517,47 @@ func (b *Bot) handleLendingCredits(chatID int64) {
 	}
 
 	b.sendMessage(chatID, message)
+}
+
+// handleSetSmoothMethod 處理設置平滑方法指令
+func (b *Bot) handleSetSmoothMethod(chatID int64, text string) {
+	parts := strings.Split(text, " ")
+	if len(parts) != 2 {
+		b.sendMessage(chatID, "格式錯誤，請使用 /smoothmethod [方法] 格式\n\n可用方法:\nmax - 最高值 (激進)\nsma - 簡單移動平均 (保守)\nema - 指數移動平均 (平滑敏感)\nhla - 高低點平均 (平衡)\np90 - 90百分位數 (避免極值)")
+		return
+	}
+
+	method := strings.ToLower(parts[1])
+	validMethods := map[string]string{
+		"max": "最高值 (激進)",
+		"sma": "簡單移動平均 (保守)",
+		"ema": "指數移動平均 (平滑敏感)",
+		"hla": "高低點平均 (平衡)",
+		"p90": "90百分位數 (避免極值)",
+	}
+
+	description, isValid := validMethods[method]
+	if !isValid {
+		b.sendMessage(chatID, "無效的平滑方法，可用方法:\nmax - 最高值 (激進)\nsma - 簡單移動平均 (保守)\nema - 指數移動平均 (平滑敏感)\nhla - 高低點平均 (平衡)\np90 - 90百分位數 (避免極值)")
+		return
+	}
+
+	b.config.KlineSmoothMethod = method
+	b.sendMessage(chatID, fmt.Sprintf("✅ K線利率平滑方法已設定為: %s - %s\n\n下次執行K線策略時將使用新的平滑方法", method, description))
+}
+
+// getSmoothMethodDescription 獲取平滑方法的描述
+func getSmoothMethodDescription(method string) string {
+	descriptions := map[string]string{
+		"max": "最高值 (激進)",
+		"sma": "簡單移動平均 (保守)",
+		"ema": "指數移動平均 (平滑敏感)",
+		"hla": "高低點平均 (平衡)",
+		"p90": "90百分位數 (避免極值)",
+	}
+
+	if desc, exists := descriptions[method]; exists {
+		return desc
+	}
+	return "未知方法"
 }

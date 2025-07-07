@@ -57,6 +57,7 @@ type Config struct {
 	KlineTimeFrame      string  `mapstructure:"KLINE_TIME_FRAME"`      // K線時間框架，預設15m
 	KlinePeriod         int     `mapstructure:"KLINE_PERIOD"`          // K線週期數量，預設24（6小時）
 	KlineSpreadPercent  float64 `mapstructure:"KLINE_SPREAD_PERCENT"`  // K線最高點加成百分比，預設0%
+	KlineSmoothMethod   string  `mapstructure:"KLINE_SMOOTH_METHOD"`   // K線利率平滑方法：max, sma, ema, hla, p90
 
 	// 測試模式設定
 	TestMode bool `mapstructure:"TEST_MODE"`
@@ -153,6 +154,18 @@ func (c *Config) Validate() error {
 		if c.KlineSpreadPercent < 0 || c.KlineSpreadPercent > 100 {
 			return errors.NewValidationError("KLINE_SPREAD_PERCENT must be between 0 and 100")
 		}
+		// 驗證平滑方法
+		validMethods := []string{"max", "sma", "ema", "hla", "p90"}
+		isValidMethod := false
+		for _, method := range validMethods {
+			if c.KlineSmoothMethod == method {
+				isValidMethod = true
+				break
+			}
+		}
+		if !isValidMethod {
+			return errors.NewValidationError("KLINE_SMOOTH_METHOD must be one of: max, sma, ema, hla, p90")
+		}
 	}
 
 	// 驗證借貸檢查間隔
@@ -233,6 +246,9 @@ func (c *Config) setKlineStrategyDefaults() {
 		}
 		if c.KlineSpreadPercent == 0 {
 			c.KlineSpreadPercent = 0.0 // 0%加成
+		}
+		if c.KlineSmoothMethod == "" {
+			c.KlineSmoothMethod = "ema" // 預設使用指數移動平均
 		}
 	}
 }
