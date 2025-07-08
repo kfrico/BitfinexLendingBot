@@ -1,5 +1,7 @@
 # Binaries for programs and plugins
 BitfinexLendingBot
+
+bitfinex-lending-bot
 *.exe
 *.exe~
 *.dll

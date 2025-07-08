@@ -48,20 +48,31 @@ func (b *Bot) handleCheck(chatID int64) {
 
 // handleStatus 處理狀態查詢指令
 func (b *Bot) handleStatus(chatID int64) {
-	statusMsg := fmt.Sprintf("目前系統狀態正常\n幣種: %s\n最小貸出金額: %.2f\n最大貸出金額: %.2f",
-		b.config.Currency, b.config.MinLoan, b.config.MaxLoan)
+	// 獲取剩餘金額
+	availableFunds, err := b.bitfinexClient.GetFundingBalance(strings.ToUpper(b.config.Currency))
+	var balanceInfo string
+	if err != nil {
+		balanceInfo = fmt.Sprintf("剩餘金額: 獲取失敗 (%v)", err)
+	} else {
+		balanceInfo = fmt.Sprintf("💰 資金狀況:\n總餘額: %.2f %s",
+			availableFunds, b.config.Currency)
+	}
+
+	statusMsg := fmt.Sprintf("📊 系統狀態報告\n\n%s\n\n💱 基本設定:\n幣種: %s\n最小貸出金額: %.2f\n最大貸出金額: %.2f",
+		balanceInfo, b.config.Currency, b.config.MinLoan, b.config.MaxLoan)
 
 	// 添加保留金額信息
 	if b.config.ReserveAmount > 0 {
 		statusMsg += fmt.Sprintf("\n保留金額: %.2f", b.config.ReserveAmount)
 	} else {
-		statusMsg += "\n未設置保留金額"
+		statusMsg += "\n保留金額: 未設置"
 	}
 
 	// 添加機器人運行參數
-	statusMsg += fmt.Sprintf("\n\n機器人運行參數:")
-	statusMsg += fmt.Sprintf("\n單次執行最大下單數量限制: %d", b.config.OrderLimit)
-	statusMsg += fmt.Sprintf("\n最低每日貸出利率: %.4f%%", b.config.MinDailyLendRate)
+	statusMsg += fmt.Sprintf("\n\n⚙️ 機器人參數:")
+	statusMsg += fmt.Sprintf("\n單次下單限制: %d", b.config.OrderLimit)
+	statusMsg += fmt.Sprintf("\n最低日利率: %.4f%%", b.config.MinDailyLendRate)
+	statusMsg += fmt.Sprintf("\n執行間隔: %d 分鐘", b.config.MinutesRun)
 
 	// 添加運行模式信息
 	if b.config.TestMode {
@@ -71,14 +82,29 @@ func (b *Bot) handleStatus(chatID int64) {
 	}
 
 	// 添加高額持有策略信息
-	statusMsg += fmt.Sprintf("\n\n高額持有策略:")
+	statusMsg += fmt.Sprintf("\n\n💎 高額持有策略:")
 	if b.config.HighHoldAmount > 0 {
-		statusMsg += fmt.Sprintf("\n金額: %.2f", b.config.HighHoldAmount)
+		statusMsg += fmt.Sprintf("\n金額: %.2f %s", b.config.HighHoldAmount, b.config.Currency)
 		statusMsg += fmt.Sprintf("\n日利率: %.4f%%", b.config.HighHoldRate)
 		statusMsg += fmt.Sprintf("\n訂單數量: %d", b.config.HighHoldOrders)
 	} else {
-		statusMsg += "\n未啟用高額持有策略"
+		statusMsg += "\n未啟用"
 	}
+
+	// 添加當前策略信息
+	statusMsg += fmt.Sprintf("\n\n🎯 當前策略:")
+	if b.config.EnableKlineStrategy {
+		statusMsg += fmt.Sprintf("\nK線策略 (啟用)")
+		statusMsg += fmt.Sprintf("\n時間框架: %s", b.config.KlineTimeFrame)
+		statusMsg += fmt.Sprintf("\n週期數: %d", b.config.KlinePeriod)
+		statusMsg += fmt.Sprintf("\n加成: %.1f%%", b.config.KlineSpreadPercent)
+	} else if b.config.EnableSmartStrategy {
+		statusMsg += fmt.Sprintf("\n智能策略 (啟用)")
+	} else {
+		statusMsg += fmt.Sprintf("\n傳統策略 (啟用)")
+	}
+
+	statusMsg += fmt.Sprintf("\n\n💡 使用 /strategy 查看詳細策略狀態")
 
 	b.sendMessage(chatID, statusMsg)
 }
