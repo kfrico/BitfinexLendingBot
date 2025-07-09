@@ -256,7 +256,7 @@ func (b *Bot) handleHelp(chatID int64) {
 /orderlimit [數值] - 設置單次執行最大下單數量限制
 /mindailylendrate [數值] - 設置最低每日貸出利率
 /highholdrate [數值] - 設置高額持有策略的日利率
-/highholdamount [數值] - 設置高額持有策略的金額
+/highholdamount [數值] - 設置高額持有策略的金額 (設為0關閉)
 /highholdorders [數值] - 設置高額持有策略的訂單數量
 /raterangeincrease [數值] - 設置利率範圍增加百分比 (0-100%)
 

@@ -100,8 +100,14 @@ func (b *Bot) handleStatus(chatID int64) {
 		statusMsg += fmt.Sprintf("\n加成: %.1f%%", b.config.KlineSpreadPercent)
 	} else if b.config.EnableSmartStrategy {
 		statusMsg += fmt.Sprintf("\n智能策略 (啟用)")
+		statusMsg += fmt.Sprintf("\n利率範圍增加: %.1f%%", b.config.RateRangeIncreasePercent*100)
 	} else {
 		statusMsg += fmt.Sprintf("\n傳統策略 (啟用)")
+	}
+
+	// 添加利率範圍增加百分比 (對所有策略都適用)
+	if b.config.RateRangeIncreasePercent > 0 {
+		statusMsg += fmt.Sprintf("\n📊 利率範圍增加: %.1f%%", b.config.RateRangeIncreasePercent*100)
 	}
 
 	statusMsg += fmt.Sprintf("\n\n💡 使用 /strategy 查看詳細策略狀態")
@@ -213,18 +219,23 @@ func (b *Bot) handleSetHighHoldRate(chatID int64, text string) {
 func (b *Bot) handleSetHighHoldAmount(chatID int64, text string) {
 	parts := strings.Split(text, " ")
 	if len(parts) != 2 {
-		b.sendMessage(chatID, "格式錯誤，請使用 /highholdamount [數值] 格式")
+		b.sendMessage(chatID, "格式錯誤，請使用 /highholdamount [數值] 格式\n提示: 設置為 0 可關閉高額持有策略")
 		return
 	}
 
 	amount, err := strconv.ParseFloat(parts[1], 64)
-	if err != nil || amount <= 0 {
-		b.sendMessage(chatID, "請輸入有效的正數值")
+	if err != nil || amount < 0 {
+		b.sendMessage(chatID, "請輸入有效的非負數值\n提示: 設置為 0 可關閉高額持有策略")
 		return
 	}
 
 	b.config.HighHoldAmount = amount
-	b.sendMessage(chatID, fmt.Sprintf("高額持有策略的金額已設定為: %.2f", amount))
+
+	if amount == 0 {
+		b.sendMessage(chatID, "✅ 高額持有策略已關閉\n高額持有金額已設定為: 0.00")
+	} else {
+		b.sendMessage(chatID, fmt.Sprintf("✅ 高額持有策略已啟用\n高額持有金額已設定為: %.2f %s", amount, b.config.Currency))
+	}
 }
 
 // handleSetHighHoldOrders 處理設置高額持有訂單數量指令
