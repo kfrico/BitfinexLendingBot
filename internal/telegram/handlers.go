@@ -192,6 +192,59 @@ func (b *Bot) handleSetMinDailyRate(chatID int64, text string) {
 	b.sendMessage(chatID, fmt.Sprintf("最低每日貸出利率已設定為: %.4f%%", rate))
 }
 
+// handleSetMinLoan 處理設置最小貸出金額指令
+func (b *Bot) handleSetMinLoan(chatID int64, text string) {
+	parts := strings.Split(text, " ")
+	if len(parts) != 2 {
+		b.sendMessage(chatID, "格式錯誤，請使用 /minloan [數值] 格式")
+		return
+	}
+
+	amount, err := strconv.ParseFloat(parts[1], 64)
+	if err != nil || amount <= 0 {
+		b.sendMessage(chatID, "請輸入有效的正數值")
+		return
+	}
+
+	// 檢查是否小於等於最大貸出金額
+	if b.config.MaxLoan > 0 && amount > b.config.MaxLoan {
+		b.sendMessage(chatID, fmt.Sprintf("最小貸出金額不能大於最大貸出金額 (%.2f %s)", b.config.MaxLoan, b.config.Currency))
+		return
+	}
+
+	b.config.MinLoan = amount
+	b.sendMessage(chatID, fmt.Sprintf("✅ 最小貸出金額已設定為: %.2f %s", amount, b.config.Currency))
+}
+
+// handleSetMaxLoan 處理設置最大貸出金額指令
+func (b *Bot) handleSetMaxLoan(chatID int64, text string) {
+	parts := strings.Split(text, " ")
+	if len(parts) != 2 {
+		b.sendMessage(chatID, "格式錯誤，請使用 /maxloan [數值] 格式\n提示: 設置為 0 表示無限制")
+		return
+	}
+
+	amount, err := strconv.ParseFloat(parts[1], 64)
+	if err != nil || amount < 0 {
+		b.sendMessage(chatID, "請輸入有效的非負數值\n提示: 設置為 0 表示無限制")
+		return
+	}
+
+	// 檢查是否大於等於最小貸出金額
+	if amount > 0 && amount < b.config.MinLoan {
+		b.sendMessage(chatID, fmt.Sprintf("最大貸出金額不能小於最小貸出金額 (%.2f %s)", b.config.MinLoan, b.config.Currency))
+		return
+	}
+
+	b.config.MaxLoan = amount
+
+	if amount == 0 {
+		b.sendMessage(chatID, "✅ 最大貸出金額已設定為: 無限制")
+	} else {
+		b.sendMessage(chatID, fmt.Sprintf("✅ 最大貸出金額已設定為: %.2f %s", amount, b.config.Currency))
+	}
+}
+
 // handleSetHighHoldRate 處理設置高額持有利率指令
 func (b *Bot) handleSetHighHoldRate(chatID int64, text string) {
 	parts := strings.Split(text, " ")
