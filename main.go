@@ -248,18 +248,18 @@ func (app *Application) scheduleHourlyRateCheck() {
 
 // checkRateThreshold 檢查利率閾值
 func (app *Application) checkRateThreshold() {
-	log.Println("定時檢查貸出利率...")
+	log.Println("定時檢查貸出利率（基於5分鐘K線12根高點）...")
 
 	exceeded, percentageRate, err := app.lendingBot.CheckRateThreshold()
 	if err != nil {
-		log.Printf("取得貸出利率失敗: %v", err)
+		log.Printf("取得利率數據失敗: %v", err)
 		return
 	}
 
-	log.Printf("當前貸出利率: %.4f%%, 閾值: %.4f%%", percentageRate, app.config.NotifyRateThreshold)
+	log.Printf("最近1小時最高利率: %.4f%%, 閾值: %.4f%%", percentageRate, app.config.NotifyRateThreshold)
 
 	if exceeded {
-		message := fmt.Sprintf("⚠️ 定時檢查提醒: 目前貸出利率 %.4f%% 已超過閾值 %.4f%%",
+		message := fmt.Sprintf("⚠️ 定時檢查提醒: 最近1小時最高利率 %.4f%% 已超過閾值 %.4f%%\n\n📊 檢查方式: 5分鐘K線最近12根高點分析",
 			percentageRate, app.config.NotifyRateThreshold)
 
 		if err := app.telegramBot.SendNotification(message); err != nil {
@@ -268,7 +268,7 @@ func (app *Application) checkRateThreshold() {
 			log.Printf("成功發送利率提醒")
 		}
 	} else {
-		log.Println("當前利率低於閾值，無需發送通知")
+		log.Println("最近1小時最高利率低於閾值，無需發送通知")
 	}
 }
 

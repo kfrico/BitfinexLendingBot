@@ -27,20 +27,28 @@ func (b *Bot) handleRate(chatID int64) {
 
 // handleCheck 處理利率檢查指令
 func (b *Bot) handleCheck(chatID int64) {
-	rate, err := b.bitfinexClient.GetCurrentFundingRate(b.config.GetFundingSymbol())
-	if err != nil {
-		b.sendMessage(chatID, "取得貸出利率失敗")
+	if b.lendingBot == nil {
+		b.sendMessage(chatID, "❌ 借貸機器人未初始化")
 		return
 	}
 
-	percentageRate := b.rateConverter.DecimalDailyToPercentageDaily(rate)
-	replyMsg := fmt.Sprintf("當前貸出利率: %.4f%%\n閾值: %.4f%%",
-		percentageRate, b.config.NotifyRateThreshold)
+	// 使用新的K線基礎檢查方法
+	exceeded, percentageRate, err := b.lendingBot.CheckRateThreshold()
+	if err != nil {
+		b.sendMessage(chatID, fmt.Sprintf("❌ 取得利率數據失敗: %v", err))
+		return
+	}
 
-	if percentageRate > b.config.NotifyRateThreshold {
-		replyMsg += "\n⚠️ 注意: 當前利率已超過閾值!"
+	replyMsg := fmt.Sprintf("📊 利率閾值檢查報告\n\n")
+	replyMsg += fmt.Sprintf("🎯 檢查方式: 5分鐘K線最近12根高點\n")
+	replyMsg += fmt.Sprintf("📈 最高利率: %.4f%%\n", percentageRate)
+
+	replyMsg += fmt.Sprintf("🎚️ 設定閾值: %.4f%%\n\n", b.config.NotifyRateThreshold)
+
+	if exceeded {
+		replyMsg += "⚠️ 注意: 最近1小時最高利率已超過閾值!"
 	} else {
-		replyMsg += "\n✓ 當前利率低於閾值"
+		replyMsg += "✅ 最近1小時最高利率低於閾值"
 	}
 
 	b.sendMessage(chatID, replyMsg)

@@ -326,15 +326,25 @@ func (lb *LendingBot) placeLoanOffers(loanOffers []*LoanOffer, hasPendingOrders 
 	return nil
 }
 
-// CheckRateThreshold 檢查利率是否超過閾值
+// CheckRateThreshold 檢查利率是否超過閾值（基於5分鐘K線最近12根高點）
 func (lb *LendingBot) CheckRateThreshold() (bool, float64, error) {
-	rate, err := lb.client.GetCurrentFundingRate(lb.config.GetFundingSymbol())
+	// 獲取5分鐘K線數據（12根，相當於1小時）
+	candles, err := lb.client.GetFundingCandles(
+		lb.config.GetFundingSymbol(),
+		"5m",
+		12,
+	)
 	if err != nil {
 		return false, 0, err
 	}
 
-	percentageRate := lb.rateConverter.DecimalDailyToPercentageDaily(rate)
+	// 找到最近12根K線中的最高利率
+	highestRate := lb.findMaxRate(candles)
+	percentageRate := lb.rateConverter.DecimalDailyToPercentageDaily(highestRate)
 	exceeded := percentageRate > lb.config.NotifyRateThreshold
+
+	log.Printf("K線閾值檢查 - 最近12根5分鐘K線最高利率: %.4f%%, 閾值: %.4f%%, 超過: %v",
+		percentageRate, lb.config.NotifyRateThreshold, exceeded)
 
 	return exceeded, percentageRate, nil
 }

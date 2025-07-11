@@ -206,18 +206,39 @@ func (c *Client) GetFundingBook(symbol string, limit int) ([]*FundingBookEntry, 
 	return result, nil
 }
 
-// GetCurrentFundingRate 獲取當前資金利率
+// GetCurrentFundingRate 獲取當前資金利率（Flash Return Rate）
 func (c *Client) GetCurrentFundingRate(symbol string) (float64, error) {
-	book, err := c.GetFundingBook(symbol, 1)
+	// 使用 ticker API 獲取真正的當前 funding rate (FRR)
+	url := fmt.Sprintf("https://api-pub.bitfinex.com/v2/ticker/%s", symbol)
+
+	resp, err := http.Get(url)
 	if err != nil {
-		return 0, err
+		return 0, errors.NewAPIError("failed to get funding ticker", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, errors.NewAPIError(fmt.Sprintf("API returned status code %d", resp.StatusCode), nil)
 	}
 
-	if len(book) == 0 {
-		return 0, errors.NewAPIError("no funding book data available", nil)
+	var tickerData []interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&tickerData); err != nil {
+		return 0, errors.NewAPIError("failed to decode ticker response", err)
 	}
 
-	return book[0].Rate, nil
+	// 檢查響應數據格式
+	if len(tickerData) < 2 {
+		return 0, errors.NewAPIError("invalid ticker response format", nil)
+	}
+
+	// 對於 funding symbols，FRR (Flash Return Rate) 在索引 1
+	frr, ok := tickerData[1].(float64)
+	if !ok {
+		return 0, errors.NewAPIError("failed to parse FRR from ticker", nil)
+	}
+
+	// FRR 已經是日利率格式
+	return frr, nil
 }
 
 // GetFundingCredits 獲取活躍的借貸訂單

@@ -19,6 +19,7 @@ import (
 // LendingBot interface 用於避免循環依賴
 type LendingBot interface {
 	GetActiveLendingCredits() ([]*bitfinex.FundingCredit, error)
+	CheckRateThreshold() (bool, float64, error)
 }
 
 // Bot Telegram 機器人封裝
