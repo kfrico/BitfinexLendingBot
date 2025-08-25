@@ -17,7 +17,10 @@ type Config struct {
 	// 基本設定
 	Currency   string `mapstructure:"CURRENCY"`
 	OrderLimit int    `mapstructure:"ORDER_LIMIT"`
-	MinutesRun int    `mapstructure:"MINUTES_RUN"`
+
+	RunOnlyOnNewCredits bool `mapstructure:"RUN_ONLY_ON_NEW_CREDITS"` // 是否僅在有新借貸訂單時執行重新計算訂單的任務(增加排隊訂單成交)
+	// 如果 RunOnlyOnNewCredits 設定 true 則 MinutesRun 無用
+	MinutesRun int `mapstructure:"MINUTES_RUN"` // 每隔幾分鐘清除訂單重新產生新訂單
 
 	// 貸出限制
 	MinLoan float64 `mapstructure:"MIN_LOAN"`

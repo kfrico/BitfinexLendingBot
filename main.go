@@ -104,7 +104,11 @@ func (app *Application) Run() error {
 	app.startWorkers()
 
 	log.Printf("Scheduler started at: %v", time.Now())
-	log.Printf("⚙️ 主要任務間隔: %d 分鐘", app.config.MinutesRun)
+	if app.config.RunOnlyOnNewCredits {
+		log.Printf("⚙️ 執行模式: 僅在新借貸訂單時執行")
+	} else {
+		log.Printf("⚙️ 執行模式: 定時執行，間隔: %d 分鐘", app.config.MinutesRun)
+	}
 	log.Printf("💰 借貸檢查間隔: %d 分鐘", app.config.LendingCheckMinutes)
 	log.Printf("📊 利率檢查: 每小時")
 	log.Println("🔄 按 Ctrl+C 優雅關閉...")
@@ -192,6 +196,20 @@ func (app *Application) shutdown() error {
 
 // scheduleMainTask 調度主要任務
 func (app *Application) scheduleMainTask() {
+	// 如果啟用了僅在新借貸訂單時執行的模式，則不進行定時執行
+	if app.config.RunOnlyOnNewCredits {
+		log.Println("啟用了僅在新借貸訂單時執行模式，主要任務將由借貸檢查觸發")
+		// 先執行第一次初始化
+		app.executeMainTask()
+		
+		// 等待 context 取消
+		<-app.ctx.Done()
+		log.Println("主要任務調度器收到停止信號")
+		return
+	}
+
+	// 傳統的定時執行模式
+	log.Printf("啟用定時執行模式，間隔: %d 分鐘", app.config.MinutesRun)
 	// 先執行第一次
 	app.executeMainTask()
 
@@ -307,8 +325,16 @@ func (app *Application) scheduleLendingCheck() {
 
 // executeLendingCheck 執行借貸訂單檢查
 func (app *Application) executeLendingCheck() {
-	if err := app.lendingBot.CheckNewLendingCredits(); err != nil {
+	hasNewCredits, err := app.lendingBot.CheckNewLendingCredits()
+	if err != nil {
 		log.Printf("檢查借貸訂單失敗: %v", err)
+		return
+	}
+	
+	// 如果啟用了僅在新借貸訂單時執行的模式，且發現新借貸訂單，觸發主要任務執行
+	if app.config.RunOnlyOnNewCredits && hasNewCredits {
+		log.Println("發現新借貸訂單，觸發主要任務執行")
+		app.executeMainTask()
 	}
 }
 

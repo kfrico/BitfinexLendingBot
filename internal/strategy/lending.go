@@ -355,19 +355,19 @@ func (lb *LendingBot) SetNotifyCallback(callback func(string) error) {
 }
 
 // CheckNewLendingCredits 檢查新的借貸訂單並發送通知
-func (lb *LendingBot) CheckNewLendingCredits() error {
+func (lb *LendingBot) CheckNewLendingCredits() (bool, error) {
 	log.Println("檢查新的借貸訂單...")
 
 	// 獲取當前活躍的借貸訂單
 	credits, err := lb.client.GetFundingCredits(lb.config.GetFundingSymbol())
 	if err != nil {
 		log.Printf("獲取借貸訂單失敗: %v", err)
-		return err
+		return false, err
 	}
 
 	if len(credits) == 0 {
 		log.Println("目前沒有活躍的借貸訂單")
-		return nil
+		return false, nil
 	}
 
 	// 獲取當前時間戳（毫秒）
@@ -377,7 +377,7 @@ func (lb *LendingBot) CheckNewLendingCredits() error {
 	if lb.config.LastLendingCheckTime == 0 {
 		log.Printf("首次檢查，發現 %d 個現有的借貸訂單，初始化檢查時間戳", len(credits))
 		lb.config.LastLendingCheckTime = currentTime
-		return nil
+		return false, nil
 	}
 
 	// 檢查是否有新的借貸訂單（開始時間大於上次檢查時間）
@@ -394,11 +394,12 @@ func (lb *LendingBot) CheckNewLendingCredits() error {
 	// 如果有新的借貸訂單，發送通知
 	if len(newCredits) > 0 {
 		log.Printf("發現 %d 個新的借貸訂單", len(newCredits))
-		return lb.sendLendingNotification(newCredits)
+		err := lb.sendLendingNotification(newCredits)
+		return true, err
 	}
 
 	log.Println("沒有新的借貸訂單")
-	return nil
+	return false, nil
 }
 
 // sendLendingNotification 發送借貸訂單通知
