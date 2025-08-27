@@ -11,6 +11,7 @@ import (
 	"github.com/kfrico/BitfinexLendingBot/internal/config"
 	"github.com/kfrico/BitfinexLendingBot/internal/constants"
 	"github.com/kfrico/BitfinexLendingBot/internal/rates"
+	"github.com/kfrico/BitfinexLendingBot/internal/tracker"
 )
 
 // LendingBot 貸出機器人
@@ -19,6 +20,7 @@ type LendingBot struct {
 	client         *bitfinex.Client
 	rateConverter  *rates.Converter
 	smartStrategy  *SmartStrategy
+	orderTracker   *tracker.BotOrderTracker
 	notifyCallback func(string) error // Telegram 通知回調函數
 }
 
@@ -28,6 +30,7 @@ func NewLendingBot(cfg *config.Config, client *bitfinex.Client) *LendingBot {
 		config:        cfg,
 		client:        client,
 		rateConverter: rates.NewConverter(),
+		orderTracker:  tracker.NewBotOrderTracker(),
 		smartStrategy: NewSmartStrategy(cfg),
 	}
 }
@@ -43,8 +46,11 @@ type LoanOffer struct {
 func (lb *LendingBot) Execute() error {
 	log.Println("開始執行貸出機器人...")
 
-	// 取消所有未完成訂單
-	log.Println("取消所有未完成訂單...")
+	// 清理舊的訂單記錄（避免記憶體洩漏）
+	lb.orderTracker.CleanOldOrders(24 * time.Hour)
+
+	// 取消程式創建的未完成訂單
+	log.Println("取消程式創建的未完成訂單...")
 	hasPendingOrders, err := lb.cancelAllOffers()
 	if err != nil {
 		log.Printf("取消訂單失敗: %v", err)
@@ -101,7 +107,7 @@ func (lb *LendingBot) Execute() error {
 	return lb.placeLoanOffers(loanOffers, hasPendingOrders)
 }
 
-// cancelAllOffers 取消所有未完成訂單
+// cancelAllOffers 取消程式創建的未完成訂單
 func (lb *LendingBot) cancelAllOffers() (bool, error) {
 	offers, err := lb.client.GetFundingOffers(lb.config.GetFundingSymbol())
 	if err != nil {
@@ -113,15 +119,28 @@ func (lb *LendingBot) cancelAllOffers() (bool, error) {
 		return false, nil
 	}
 
+	cancelledCount := 0
 	for _, offer := range offers {
+		// 只取消程式追蹤的訂單
+		if !lb.orderTracker.IsTrackedOrder(offer.ID) {
+			log.Printf("跳過手動創建的訂單 ID: %d", offer.ID)
+			continue
+		}
+
 		if err := lb.client.CancelFundingOffer(offer.ID); err != nil {
-			log.Printf("取消訂單失敗: %v", err)
+			log.Printf("取消程式訂單失敗: %v", err)
 		} else {
-			log.Printf("成功取消訂單 ID: %d", offer.ID)
+			log.Printf("成功取消程式訂單 ID: %d", offer.ID)
+			lb.orderTracker.RemoveOrder(offer.ID) // 從追蹤中移除
+			cancelledCount++
 		}
 	}
 
-	return true, nil
+	if cancelledCount == 0 {
+		log.Println("沒有程式創建的訂單需要取消")
+	}
+
+	return cancelledCount > 0, nil
 }
 
 // getAvailableFunds 獲取可用資金
@@ -314,10 +333,13 @@ func (lb *LendingBot) placeLoanOffers(loanOffers []*LoanOffer, hasPendingOrders 
 			log.Printf("下單 => Rate: %.6f%%, Amount: %.4f, Period: %d",
 				lb.rateConverter.DecimalToPercentage(rate), offer.Amount, offer.Period)
 
-			err := lb.client.SubmitFundingOffer(fundingSymbol, offer.Amount, rate, offer.Period, false)
+			orderID, err := lb.client.SubmitFundingOffer(fundingSymbol, offer.Amount, rate, offer.Period, false)
 			if err != nil {
 				log.Printf("下訂單失敗: %v", err)
 			} else {
+				// 追蹤程式創建的訂單
+				lb.orderTracker.TrackOrder(orderID)
+				log.Printf("成功創建訂單 ID: %d，已加入追蹤", orderID)
 				orderCount++
 			}
 		}

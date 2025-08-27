@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/bitfinexcom/bitfinex-api-go/pkg/models/common"
@@ -121,7 +122,7 @@ func (c *Client) CancelFundingOffer(offerID int64) error {
 }
 
 // SubmitFundingOffer 提交新的資金貸出訂單
-func (c *Client) SubmitFundingOffer(symbol string, amount float64, dailyRate float64, period int, hidden bool) error {
+func (c *Client) SubmitFundingOffer(symbol string, amount float64, dailyRate float64, period int, hidden bool) (int64, error) {
 	offerReq := &fundingoffer.SubmitRequest{
 		Type:   constants.OfferTypeLIMIT,
 		Symbol: symbol,
@@ -131,12 +132,22 @@ func (c *Client) SubmitFundingOffer(symbol string, amount float64, dailyRate flo
 		Hidden: hidden,
 	}
 
-	_, err := c.restClient.Funding.SubmitOffer(offerReq)
+	resp, err := c.restClient.Funding.SubmitOffer(offerReq)
 	if err != nil {
-		return errors.NewOrderError("failed to submit funding offer", err)
+		return 0, errors.NewOrderError("failed to submit funding offer", err)
 	}
 
-	return nil
+	// 從 notification 中提取 funding offer 資訊
+	if resp.NotifyInfo == nil {
+		return 0, errors.NewOrderError("funding offer response contains no order info", nil)
+	}
+
+	// 使用反射從結構體中提取 ID 字段
+	if orderID, hasID := extractIDFromStruct(resp.NotifyInfo); hasID {
+		return orderID, nil
+	}
+
+	return 0, errors.NewOrderError("unable to extract order ID from funding offer response", nil)
 }
 
 // GetWallets 獲取錢包信息
@@ -353,4 +364,40 @@ func (c *Client) GetFundingCandles(symbol string, timeFrame string, limit int) (
 	}
 
 	return candles, nil
+}
+
+// extractIDFromStruct 使用反射從結構體中提取ID字段
+func extractIDFromStruct(v interface{}) (int64, bool) {
+	rv := reflect.ValueOf(v)
+	
+	// 如果是指針，獲取其指向的值
+	if rv.Kind() == reflect.Ptr {
+		if rv.IsNil() {
+			return 0, false
+		}
+		rv = rv.Elem()
+	}
+	
+	// 必須是結構體
+	if rv.Kind() != reflect.Struct {
+		return 0, false
+	}
+	
+	// 嘗試查找 ID 字段
+	idField := rv.FieldByName("ID")
+	if !idField.IsValid() {
+		return 0, false
+	}
+	
+	// 檢查字段類型並轉換
+	switch idField.Kind() {
+	case reflect.Int64:
+		return idField.Int(), true
+	case reflect.Int:
+		return int64(idField.Int()), true
+	case reflect.Int32:
+		return int64(idField.Int()), true
+	default:
+		return 0, false
+	}
 }
