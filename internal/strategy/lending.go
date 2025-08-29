@@ -376,9 +376,16 @@ func (lb *LendingBot) SetNotifyCallback(callback func(string) error) {
 	lb.notifyCallback = callback
 }
 
-// CheckNewLendingCredits 檢查新的借貸訂單並發送通知
+// CheckNewLendingCredits 檢查新的借貸訂單和餘額變化，決定是否需要重新執行策略
 func (lb *LendingBot) CheckNewLendingCredits() (bool, error) {
-	log.Println("檢查新的借貸訂單...")
+	log.Println("檢查執行觸發條件（新借貸訂單、餘額變化）...")
+
+	// 獲取當前可用餘額
+	currentBalance, err := lb.getAvailableFunds()
+	if err != nil {
+		log.Printf("獲取餘額失敗: %v", err)
+		return false, err
+	}
 
 	// 獲取當前活躍的借貸訂單
 	credits, err := lb.client.GetFundingCredits(lb.config.GetFundingSymbol())
@@ -387,22 +394,21 @@ func (lb *LendingBot) CheckNewLendingCredits() (bool, error) {
 		return false, err
 	}
 
-	if len(credits) == 0 {
-		log.Println("目前沒有活躍的借貸訂單")
-		return false, nil
-	}
-
 	// 獲取當前時間戳（毫秒）
 	currentTime := time.Now().UnixNano() / int64(time.Millisecond)
 
-	// 如果這是第一次檢查（LastLendingCheckTime 為 0），初始化時間戳但不發送通知
+	// 如果這是第一次檢查，初始化時間戳和餘額但不觸發執行
 	if lb.config.LastLendingCheckTime == 0 {
-		log.Printf("首次檢查，發現 %d 個現有的借貸訂單，初始化檢查時間戳", len(credits))
+		log.Printf("首次檢查，發現 %d 個現有借貸訂單，餘額: %.2f，初始化檢查參數", len(credits), currentBalance)
 		lb.config.LastLendingCheckTime = currentTime
+		lb.config.LastAvailableBalance = currentBalance
 		return false, nil
 	}
 
-	// 檢查是否有新的借貸訂單（開始時間大於上次檢查時間）
+	shouldExecute := false
+	var reasons []string
+
+	// 檢查1: 是否有新的借貸訂單
 	var newCredits []*bitfinex.FundingCredit
 	for _, credit := range credits {
 		if credit.MTSOpened > lb.config.LastLendingCheckTime {
@@ -410,17 +416,43 @@ func (lb *LendingBot) CheckNewLendingCredits() (bool, error) {
 		}
 	}
 
-	// 更新最後檢查時間
-	lb.config.LastLendingCheckTime = currentTime
-
-	// 如果有新的借貸訂單，發送通知
 	if len(newCredits) > 0 {
-		log.Printf("發現 %d 個新的借貸訂單", len(newCredits))
-		err := lb.sendLendingNotification(newCredits)
-		return true, err
+		shouldExecute = true
+		reasons = append(reasons, fmt.Sprintf("發現 %d 個新的借貸訂單", len(newCredits)))
+		// 發送借貸通知
+		if err := lb.sendLendingNotification(newCredits); err != nil {
+			log.Printf("發送借貸通知失敗: %v", err)
+		}
 	}
 
-	log.Println("沒有新的借貸訂單")
+	// 檢查2: 餘額是否顯著增加
+	lastBalance := lb.config.LastAvailableBalance
+	balanceIncrease := currentBalance - lastBalance
+	
+	// 設定觸發閾值：餘額增加超過10%或超過最小貸出金額
+	increaseThreshold := math.Max(lastBalance*0.1, lb.config.MinLoan)
+	
+	if balanceIncrease > increaseThreshold {
+		shouldExecute = true
+		reasons = append(reasons, fmt.Sprintf("餘額顯著增加: %.2f -> %.2f (+%.2f)", lastBalance, currentBalance, balanceIncrease))
+	}
+
+	// 檢查3: 從零餘額恢復
+	if lastBalance == 0 && currentBalance > lb.config.MinLoan {
+		shouldExecute = true
+		reasons = append(reasons, fmt.Sprintf("從零餘額恢復: %.2f -> %.2f", lastBalance, currentBalance))
+	}
+
+	// 更新檢查參數
+	lb.config.LastLendingCheckTime = currentTime
+	lb.config.LastAvailableBalance = currentBalance
+
+	if shouldExecute {
+		log.Printf("觸發策略執行，原因: %s", strings.Join(reasons, "; "))
+		return true, nil
+	}
+
+	log.Printf("無需執行策略，餘額: %.2f (上次: %.2f)，無新借貸訂單", currentBalance, lastBalance)
 	return false, nil
 }
 

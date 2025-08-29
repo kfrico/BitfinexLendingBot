@@ -105,7 +105,7 @@ func (app *Application) Run() error {
 
 	log.Printf("Scheduler started at: %v", time.Now())
 	if app.config.RunOnlyOnNewCredits {
-		log.Printf("⚙️ 執行模式: 僅在新借貸訂單時執行")
+		log.Printf("⚙️ 執行模式: 觸發條件執行（新借貸訂單或餘額變化）")
 	} else {
 		log.Printf("⚙️ 執行模式: 定時執行，間隔: %d 分鐘", app.config.MinutesRun)
 	}
@@ -196,9 +196,9 @@ func (app *Application) shutdown() error {
 
 // scheduleMainTask 調度主要任務
 func (app *Application) scheduleMainTask() {
-	// 如果啟用了僅在新借貸訂單時執行的模式，則不進行定時執行
+	// 如果啟用了僅在觸發條件時執行的模式（新借貸訂單或餘額變化），則不進行定時執行
 	if app.config.RunOnlyOnNewCredits {
-		log.Println("啟用了僅在新借貸訂單時執行模式，主要任務將由借貸檢查觸發")
+		log.Println("啟用了觸發條件執行模式（新借貸訂單或餘額變化），主要任務將由檢查觸發")
 		// 先執行第一次初始化
 		app.executeMainTask()
 		
@@ -331,9 +331,9 @@ func (app *Application) executeLendingCheck() {
 		return
 	}
 	
-	// 如果啟用了僅在新借貸訂單時執行的模式，且發現新借貸訂單，觸發主要任務執行
+	// 如果啟用了觸發條件執行模式，且滿足觸發條件（新借貸訂單或餘額變化），觸發主要任務執行
 	if app.config.RunOnlyOnNewCredits && hasNewCredits {
-		log.Println("發現新借貸訂單，觸發主要任務執行")
+		log.Println("滿足執行觸發條件，觸發主要任務執行")
 		app.executeMainTask()
 	}
 }

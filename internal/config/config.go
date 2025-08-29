@@ -18,7 +18,7 @@ type Config struct {
 	Currency   string `mapstructure:"CURRENCY"`
 	OrderLimit int    `mapstructure:"ORDER_LIMIT"`
 
-	RunOnlyOnNewCredits bool `mapstructure:"RUN_ONLY_ON_NEW_CREDITS"` // 是否僅在有新借貸訂單時執行重新計算訂單的任務(增加排隊訂單成交)
+	RunOnlyOnNewCredits bool `mapstructure:"RUN_ONLY_ON_NEW_CREDITS"` // 是否僅在滿足觸發條件時執行（新借貸訂單或餘額顯著變化）
 	// 如果 RunOnlyOnNewCredits 設定 true 則 MinutesRun 無用
 	MinutesRun int `mapstructure:"MINUTES_RUN"` // 每隔幾分鐘清除訂單重新產生新訂單
 
@@ -66,8 +66,9 @@ type Config struct {
 	TestMode bool `mapstructure:"TEST_MODE"`
 
 	// 借貸通知設定
-	LastLendingCheckTime int64 // 上次檢查借貸訂單的時間戳
-	LendingCheckMinutes  int   `mapstructure:"LENDING_CHECK_MINUTES"` // 借貸訂單檢查間隔（分鐘）
+	LastLendingCheckTime int64   // 上次檢查借貸訂單的時間戳
+	LastAvailableBalance float64 // 上次檢查時的可用餘額
+	LendingCheckMinutes  int     `mapstructure:"LENDING_CHECK_MINUTES"` // 借貸訂單檢查間隔（分鐘）
 }
 
 // LoadConfig 從文件加載配置
