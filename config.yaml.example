@@ -9,7 +9,7 @@ MINUTES_RUN: 3 # 每隔幾分鐘執行一次
 MIN_LOAN: 150 # 每筆最小金額
 #MAX_LOAN: 150 # 每筆最大金額
 
-MIN_DAILY_LEND_RATE: 0.02 # 最小利率
+MIN_DAILY_LEND_RATE: 0.02 # 最小利率（可設為 FRR 以 FRR 模式掛單）
 SPREAD_LEND: 30 # 資金分配幾份
 GAP_BOTTOM: 10 # 參數是指ask掛單裡面第幾個index 下限 通常有好幾千個掛
 GAP_TOP: 5000 # 參數是指ask掛單裡面第幾個index 上限 通常有好幾千個掛單

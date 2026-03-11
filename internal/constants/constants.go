@@ -4,18 +4,21 @@ import "time"
 
 // API 相關常量
 const (
-	FundingSymbolPrefix = "f"
-	WalletTypeFunding   = "funding"
-	OfferTypeLIMIT      = "LIMIT"
-	DefaultPeriodDays   = 2
-	Period30Days        = 30
-	Period120Days       = 120
+	FundingSymbolPrefix  = "f"
+	WalletTypeFunding    = "funding"
+	OfferTypeLIMIT       = "LIMIT"
+	OfferTypeFRRDeltaVar = "FRRDELTAVAR"
+	DefaultPeriodDays    = 2
+	Period30Days         = 30
+	Period120Days        = 120
 )
 
 // 利率轉換常量
 const (
 	DaysPerYear         = 365
 	PercentageToDecimal = 100.0
+	DefaultFRRDelta     = 0.0
+	MinDailyRateModeFRR = "FRR"
 )
 
 // 默認配置值

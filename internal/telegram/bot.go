@@ -259,7 +259,7 @@ func (b *Bot) handleHelp(chatID int64) {
 /threshold [數值] - 設置利率通知閾值
 /reserve [數值] - 設置不參與借貸的保留金額
 /orderlimit [數值] - 設置單次執行最大下單數量限制
-/mindailylendrate [數值] - 設置最低每日貸出利率
+/mindailylendrate [數值|FRR] - 設置最低每日貸出利率（FRR 為浮動利率模式）
 /minloan [數值] - 設置單筆最小貸出金額
 /maxloan [數值] - 設置單筆最大貸出金額 (設為0無限制)
 /highholdrate [數值] - 設置高額持有策略的日利率

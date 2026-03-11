@@ -305,10 +305,48 @@ func (lb *LendingBot) calculatePeriod(dailyRate float64) int {
 func (lb *LendingBot) placeLoanOffers(loanOffers []*LoanOffer, hasPendingOrders bool) error {
 	orderCount := 0
 	fundingSymbol := lb.config.GetFundingSymbol()
+	useFRROffers := lb.config.IsMinDailyLendRateFRR()
+
+	if useFRROffers {
+		log.Printf("MIN_DAILY_LEND_RATE=%s，使用 FRR 模式掛單", constants.MinDailyRateModeFRR)
+	}
 
 	for _, offer := range loanOffers {
 		if lb.config.OrderLimit != 0 && orderCount >= lb.config.OrderLimit {
 			break
+		}
+
+		if useFRROffers {
+			frrPeriod := constants.Period120Days
+
+			if lb.config.TestMode {
+				log.Printf("🧪 [測試模式] 模擬下單 => Type: %s, Amount: %.4f, Period: %d (參考Rate: %.6f%%)",
+					constants.OfferTypeFRRDeltaVar,
+					offer.Amount,
+					frrPeriod,
+					lb.rateConverter.DecimalToPercentage(offer.Rate),
+				)
+				orderCount++
+			} else {
+				log.Printf("下單 => Type: %s, Amount: %.4f, Period: %d (參考Rate: %.6f%%)",
+					constants.OfferTypeFRRDeltaVar,
+					offer.Amount,
+					frrPeriod,
+					lb.rateConverter.DecimalToPercentage(offer.Rate),
+				)
+
+				orderID, err := lb.client.SubmitFundingOfferFRR(fundingSymbol, offer.Amount, frrPeriod, false)
+				if err != nil {
+					log.Printf("下訂單失敗: %v", err)
+				} else {
+					// 追蹤程式創建的訂單
+					lb.orderTracker.TrackOrder(orderID)
+					log.Printf("成功創建訂單 ID: %d，已加入追蹤", orderID)
+					orderCount++
+				}
+			}
+
+			continue
 		}
 
 		rate := offer.Rate

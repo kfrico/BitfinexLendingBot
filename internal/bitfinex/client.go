@@ -142,8 +142,17 @@ func (c *Client) CancelFundingOffer(offerID int64) error {
 
 // SubmitFundingOffer 提交新的資金貸出訂單
 func (c *Client) SubmitFundingOffer(symbol string, amount float64, dailyRate float64, period int, hidden bool) (int64, error) {
+	return c.submitFundingOffer(symbol, amount, dailyRate, period, hidden, constants.OfferTypeLIMIT)
+}
+
+// SubmitFundingOfferFRR 提交 FRR 型資金貸出訂單（delta = 0）
+func (c *Client) SubmitFundingOfferFRR(symbol string, amount float64, period int, hidden bool) (int64, error) {
+	return c.submitFundingOffer(symbol, amount, constants.DefaultFRRDelta, period, hidden, constants.OfferTypeFRRDeltaVar)
+}
+
+func (c *Client) submitFundingOffer(symbol string, amount float64, dailyRate float64, period int, hidden bool, offerType string) (int64, error) {
 	offerReq := &fundingoffer.SubmitRequest{
-		Type:   constants.OfferTypeLIMIT,
+		Type:   offerType,
 		Symbol: symbol,
 		Amount: amount,
 		Rate:   dailyRate, // v2 API 使用日利率

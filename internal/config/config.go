@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/kfrico/BitfinexLendingBot/internal/constants"
@@ -27,7 +29,7 @@ type Config struct {
 	MaxLoan float64 `mapstructure:"MAX_LOAN"`
 
 	// 利率策略
-	MinDailyLendRate              float64 `mapstructure:"MIN_DAILY_LEND_RATE"`
+	MinDailyLendRate              any     `mapstructure:"MIN_DAILY_LEND_RATE"` // 支援數值或 "FRR"
 	SpreadLend                    int     `mapstructure:"SPREAD_LEND"`
 	GapBottom                     float64 `mapstructure:"GAP_BOTTOM"`
 	GapTop                        float64 `mapstructure:"GAP_TOP"`
@@ -118,8 +120,12 @@ func (c *Config) Validate() error {
 	if c.MaxLoan > 0 && c.MaxLoan < c.MinLoan {
 		return errors.NewValidationError("MAX_LOAN cannot be less than MIN_LOAN")
 	}
-	if c.MinDailyLendRate <= 0 {
-		return errors.NewValidationError("MIN_DAILY_LEND_RATE must be positive")
+	minDailyRate, useFRR, err := c.parseMinDailyLendRate()
+	if err != nil {
+		return err
+	}
+	if !useFRR && minDailyRate <= 0 {
+		return errors.NewValidationError("MIN_DAILY_LEND_RATE must be positive or FRR")
 	}
 	if c.SpreadLend <= 0 {
 		return errors.NewValidationError("SPREAD_LEND must be positive")
@@ -187,7 +193,81 @@ func (c *Config) GetFundingSymbol() string {
 
 // GetMinDailyRateDecimal 獲取最低日利率（小數格式）
 func (c *Config) GetMinDailyRateDecimal() float64 {
-	return c.MinDailyLendRate / constants.PercentageToDecimal
+	minDailyRate, useFRR, err := c.parseMinDailyLendRate()
+	if err != nil || useFRR {
+		return 0
+	}
+	return minDailyRate / constants.PercentageToDecimal
+}
+
+// GetMinDailyRatePercentage 獲取最低日利率（百分比）
+func (c *Config) GetMinDailyRatePercentage() float64 {
+	minDailyRate, useFRR, err := c.parseMinDailyLendRate()
+	if err != nil || useFRR {
+		return 0
+	}
+	return minDailyRate
+}
+
+// GetMinDailyRateDisplay 獲取最低日利率顯示文字
+func (c *Config) GetMinDailyRateDisplay() string {
+	if c.IsMinDailyLendRateFRR() {
+		return constants.MinDailyRateModeFRR
+	}
+	return fmt.Sprintf("%.4f%%", c.GetMinDailyRatePercentage())
+}
+
+// IsMinDailyLendRateFRR 檢查最低日利率是否設定為 FRR 模式
+func (c *Config) IsMinDailyLendRateFRR() bool {
+	_, useFRR, err := c.parseMinDailyLendRate()
+	return err == nil && useFRR
+}
+
+// parseMinDailyLendRate 解析最低日利率配置（百分比）
+func (c *Config) parseMinDailyLendRate() (float64, bool, error) {
+	switch value := c.MinDailyLendRate.(type) {
+	case nil:
+		return 0, false, errors.NewValidationError("MIN_DAILY_LEND_RATE is required")
+	case string:
+		trimmedValue := strings.TrimSpace(value)
+		if trimmedValue == "" {
+			return 0, false, errors.NewValidationError("MIN_DAILY_LEND_RATE is required")
+		}
+		if strings.EqualFold(trimmedValue, constants.MinDailyRateModeFRR) {
+			return 0, true, nil
+		}
+		rate, err := strconv.ParseFloat(trimmedValue, 64)
+		if err != nil {
+			return 0, false, errors.NewValidationError("MIN_DAILY_LEND_RATE must be a positive number or FRR")
+		}
+		return rate, false, nil
+	case float64:
+		return value, false, nil
+	case float32:
+		return float64(value), false, nil
+	case int:
+		return float64(value), false, nil
+	case int8:
+		return float64(value), false, nil
+	case int16:
+		return float64(value), false, nil
+	case int32:
+		return float64(value), false, nil
+	case int64:
+		return float64(value), false, nil
+	case uint:
+		return float64(value), false, nil
+	case uint8:
+		return float64(value), false, nil
+	case uint16:
+		return float64(value), false, nil
+	case uint32:
+		return float64(value), false, nil
+	case uint64:
+		return float64(value), false, nil
+	default:
+		return 0, false, errors.NewValidationError("MIN_DAILY_LEND_RATE must be a positive number or FRR")
+	}
 }
 
 // GetHighHoldRateDecimal 獲取高額持有利率（小數格式）

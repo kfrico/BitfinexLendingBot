@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kfrico/BitfinexLendingBot/internal/constants"
 )
 
 // handleRate 處理利率查詢指令
@@ -79,7 +81,11 @@ func (b *Bot) handleStatus(chatID int64) {
 	// 添加機器人運行參數
 	statusMsg += fmt.Sprintf("\n\n⚙️ 機器人參數:")
 	statusMsg += fmt.Sprintf("\n單次下單限制: %d", b.config.OrderLimit)
-	statusMsg += fmt.Sprintf("\n最低日利率: %.4f%%", b.config.MinDailyLendRate)
+	if b.config.IsMinDailyLendRateFRR() {
+		statusMsg += fmt.Sprintf("\n最低日利率: %s (FRR 掛單模式)", b.config.GetMinDailyRateDisplay())
+	} else {
+		statusMsg += fmt.Sprintf("\n最低日利率: %s", b.config.GetMinDailyRateDisplay())
+	}
 	statusMsg += fmt.Sprintf("\n執行間隔: %d 分鐘", b.config.MinutesRun)
 
 	// 添加運行模式信息
@@ -181,11 +187,18 @@ func (b *Bot) handleSetOrderLimit(chatID int64, text string) {
 func (b *Bot) handleSetMinDailyRate(chatID int64, text string) {
 	parts := strings.Split(text, " ")
 	if len(parts) != 2 {
-		b.sendMessage(chatID, "格式錯誤，請使用 /mindailylendrate [數值] 格式")
+		b.sendMessage(chatID, "格式錯誤，請使用 /mindailylendrate [數值|FRR] 格式")
 		return
 	}
 
-	rate, err := strconv.ParseFloat(parts[1], 64)
+	input := strings.TrimSpace(parts[1])
+	if strings.EqualFold(input, constants.MinDailyRateModeFRR) {
+		b.config.MinDailyLendRate = constants.MinDailyRateModeFRR
+		b.sendMessage(chatID, "最低每日貸出利率已設定為: FRR（將使用 FRR 模式掛單）")
+		return
+	}
+
+	rate, err := strconv.ParseFloat(input, 64)
 	if err != nil || rate <= 0 {
 		b.sendMessage(chatID, "請輸入有效的正數值")
 		return

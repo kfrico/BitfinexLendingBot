@@ -33,6 +33,27 @@ func TestConfig_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "valid config with FRR min daily rate",
+			config: Config{
+				BitfinexApiKey:           "test_api_key",
+				BitfinexSecretKey:        "test_secret_key",
+				Currency:                 "USD",
+				MinLoan:                  150.0,
+				MaxLoan:                  1000.0,
+				MinDailyLendRate:         "FRR",
+				SpreadLend:               30,
+				GapBottom:                10,
+				GapTop:                   5000,
+				EnableSmartStrategy:      true,
+				VolatilityThreshold:      0.002,
+				MaxRateMultiplier:        2.0,
+				MinRateMultiplier:        0.8,
+				RateRangeIncreasePercent: 0.2,
+				LendingCheckMinutes:      10,
+			},
+			wantErr: false,
+		},
+		{
 			name: "missing API key",
 			config: Config{
 				BitfinexApiKey:      "",
@@ -112,6 +133,21 @@ func TestConfig_Validate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "invalid min daily rate string",
+			config: Config{
+				BitfinexApiKey:      "test_api_key",
+				BitfinexSecretKey:   "test_secret_key",
+				Currency:            "USD",
+				MinLoan:             150.0,
+				MinDailyLendRate:    "INVALID",
+				SpreadLend:          30,
+				GapBottom:           10,
+				GapTop:              5000,
+				LendingCheckMinutes: 10,
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -168,6 +204,40 @@ LENDING_CHECK_MINUTES: 10
 	}
 }
 
+func TestLoadConfigWithFRRMinDailyRate(t *testing.T) {
+	testConfigContent := `
+BITFINEX_API_KEY: "test_api_key"
+BITFINEX_SECRET_KEY: "test_secret_key"
+CURRENCY: "USD"
+MIN_LOAN: 150.0
+MIN_DAILY_LEND_RATE: FRR
+SPREAD_LEND: 30
+GAP_BOTTOM: 10
+GAP_TOP: 5000
+LENDING_CHECK_MINUTES: 10
+`
+
+	tmpFile, err := os.CreateTemp("", "test_config_frr_*.yaml")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(testConfigContent); err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	config, err := LoadConfig(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	if !config.IsMinDailyLendRateFRR() {
+		t.Errorf("Expected FRR mode to be enabled from config")
+	}
+}
+
 func TestGetFundingSymbol(t *testing.T) {
 	config := &Config{Currency: "USD"}
 	expected := "fUSD"
@@ -183,5 +253,17 @@ func TestGetMinDailyRateDecimal(t *testing.T) {
 	result := config.GetMinDailyRateDecimal()
 	if result != expected {
 		t.Errorf("Expected %f, got %f", expected, result)
+	}
+}
+
+func TestGetMinDailyRateDecimal_FRR(t *testing.T) {
+	config := &Config{MinDailyLendRate: "FRR"}
+	expected := 0.0
+	result := config.GetMinDailyRateDecimal()
+	if result != expected {
+		t.Errorf("Expected %f, got %f", expected, result)
+	}
+	if !config.IsMinDailyLendRateFRR() {
+		t.Errorf("Expected IsMinDailyLendRateFRR() to be true")
 	}
 }
