@@ -428,10 +428,10 @@ func (lb *LendingBot) CheckNewLendingCredits() (bool, error) {
 	// 檢查2: 餘額是否顯著增加
 	lastBalance := lb.config.LastAvailableBalance
 	balanceIncrease := currentBalance - lastBalance
-	
+
 	// 設定觸發閾值：餘額增加超過10%或超過最小貸出金額
 	increaseThreshold := math.Max(lastBalance*0.1, lb.config.MinLoan)
-	
+
 	if balanceIncrease > increaseThreshold {
 		shouldExecute = true
 		reasons = append(reasons, fmt.Sprintf("餘額顯著增加: %.2f -> %.2f (+%.2f)", lastBalance, currentBalance, balanceIncrease))
@@ -465,12 +465,29 @@ func (lb *LendingBot) sendLendingNotification(credits []*bitfinex.FundingCredit)
 
 	message := "💰 新的借貸訂單通知\n\n"
 
+	frrFallbackRate := 0.0
+	for _, credit := range credits {
+		if credit.EffectiveDailyRate() == 0 {
+			rate, err := lb.client.GetCurrentFundingRate(lb.config.GetFundingSymbol())
+			if err != nil {
+				log.Printf("取得 FRR 利率失敗: %v", err)
+				break
+			}
+			frrFallbackRate = rate
+			break
+		}
+	}
+
 	// 先計算所有訂單的統計信息
 	totalAmount := 0.0
 	totalEarnings := 0.0
 
 	for _, credit := range credits {
-		dailyEarnings := credit.Amount * credit.Rate
+		effectiveRate := credit.EffectiveDailyRate()
+		if effectiveRate == 0 && frrFallbackRate > 0 {
+			effectiveRate = frrFallbackRate
+		}
+		dailyEarnings := credit.Amount * effectiveRate
 		periodEarnings := dailyEarnings * float64(credit.Period)
 		totalAmount += credit.Amount
 		totalEarnings += periodEarnings
@@ -485,7 +502,11 @@ func (lb *LendingBot) sendLendingNotification(credits []*bitfinex.FundingCredit)
 		}
 
 		// 計算預期收益（日利率 * 金額 * 期間）
-		dailyEarnings := credit.Amount * credit.Rate
+		effectiveRate := credit.EffectiveDailyRate()
+		if effectiveRate == 0 && frrFallbackRate > 0 {
+			effectiveRate = frrFallbackRate
+		}
+		dailyEarnings := credit.Amount * effectiveRate
 		periodEarnings := dailyEarnings * float64(credit.Period)
 
 		// 格式化開始時間
@@ -493,8 +514,8 @@ func (lb *LendingBot) sendLendingNotification(credits []*bitfinex.FundingCredit)
 
 		message += fmt.Sprintf("📊 訂單 #%d\n", i+1)
 		message += fmt.Sprintf("💵 金額: %.2f %s\n", credit.Amount, lb.config.Currency)
-		message += fmt.Sprintf("📈 日利率: %.4f%%\n", lb.rateConverter.DecimalToPercentage(credit.Rate))
-		message += fmt.Sprintf("📈 年利率: %.4f%%\n", lb.rateConverter.DecimalToPercentage(credit.Rate)*constants.DaysPerYear)
+		message += fmt.Sprintf("📈 日利率: %.4f%%\n", lb.rateConverter.DecimalToPercentage(effectiveRate))
+		message += fmt.Sprintf("📈 年利率: %.4f%%\n", lb.rateConverter.DecimalToPercentage(effectiveRate)*constants.DaysPerYear)
 		message += fmt.Sprintf("⏰ 期間: %d 天\n", credit.Period)
 		message += fmt.Sprintf("💰 預期收益: %.4f %s\n", periodEarnings, lb.config.Currency)
 		message += fmt.Sprintf("🕐 開始時間: %s\n", openTime.Format("2006-01-02 15:04:05"))

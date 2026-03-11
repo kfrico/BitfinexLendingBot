@@ -57,11 +57,30 @@ type FundingCredit struct {
 	ID         int64
 	Symbol     string
 	Amount     float64
+	RateType   string  // 利率類型（frr/fixed）
 	Rate       float64 // 日利率（小數格式）
+	RateReal   float64 // 實際日利率（FRR 用）
 	Period     int64   // 期間（天）
 	MTSCreated int64   // 創建時間戳（毫秒）
 	MTSOpened  int64   // 開始時間戳（毫秒）
 	Status     string  // 狀態
+}
+
+// EffectiveDailyRate 返回可用的日利率（FRR 使用 RateReal）
+func (fc *FundingCredit) EffectiveDailyRate() float64 {
+	if fc == nil {
+		return 0
+	}
+	if strings.EqualFold(fc.RateType, "frr") && fc.RateReal > 0 {
+		return fc.RateReal
+	}
+	if fc.Rate > 0 {
+		return fc.Rate
+	}
+	if fc.RateReal > 0 {
+		return fc.RateReal
+	}
+	return 0
 }
 
 // Candle 代表 K 線數據
@@ -238,18 +257,22 @@ func (c *Client) GetCurrentFundingRate(symbol string) (float64, error) {
 	}
 
 	// 檢查響應數據格式
-	if len(tickerData) < 2 {
+	if len(tickerData) < 1 {
 		return 0, errors.NewAPIError("invalid ticker response format", nil)
 	}
 
-	// 對於 funding symbols，FRR (Flash Return Rate) 在索引 1
-	frr, ok := tickerData[1].(float64)
-	if !ok {
-		return 0, errors.NewAPIError("failed to parse FRR from ticker", nil)
+	// 對於 funding symbols，FRR (Flash Return Rate) 依官方文件在索引 0
+	if frr, ok := tickerData[0].(float64); ok {
+		return frr, nil
+	}
+	// 容錯：若索引 0 不可解析，嘗試索引 1
+	if len(tickerData) > 1 {
+		if frr, ok := tickerData[1].(float64); ok {
+			return frr, nil
+		}
 	}
 
-	// FRR 已經是日利率格式
-	return frr, nil
+	return 0, errors.NewAPIError("failed to parse FRR from ticker", nil)
 }
 
 // GetFundingCredits 獲取活躍的借貸訂單
@@ -278,7 +301,9 @@ func (c *Client) GetFundingCredits(symbol string) ([]*FundingCredit, error) {
 			ID:         credit.ID,
 			Symbol:     credit.Symbol,
 			Amount:     credit.Amount,
+			RateType:   credit.RateType,
 			Rate:       credit.Rate, // API 已返回日利率
+			RateReal:   credit.RateReal,
 			Period:     credit.Period,
 			MTSCreated: credit.MTSCreated,
 			MTSOpened:  credit.MTSOpened,
@@ -369,7 +394,7 @@ func (c *Client) GetFundingCandles(symbol string, timeFrame string, limit int) (
 // extractIDFromStruct 使用反射從結構體中提取ID字段
 func extractIDFromStruct(v interface{}) (int64, bool) {
 	rv := reflect.ValueOf(v)
-	
+
 	// 如果是指針，獲取其指向的值
 	if rv.Kind() == reflect.Ptr {
 		if rv.IsNil() {
@@ -377,18 +402,18 @@ func extractIDFromStruct(v interface{}) (int64, bool) {
 		}
 		rv = rv.Elem()
 	}
-	
+
 	// 必須是結構體
 	if rv.Kind() != reflect.Struct {
 		return 0, false
 	}
-	
+
 	// 嘗試查找 ID 字段
 	idField := rv.FieldByName("ID")
 	if !idField.IsValid() {
 		return 0, false
 	}
-	
+
 	// 檢查字段類型並轉換
 	switch idField.Kind() {
 	case reflect.Int64:

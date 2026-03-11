@@ -553,13 +553,29 @@ func (b *Bot) handleLendingCredits(chatID int64) {
 
 	message := "💰 當前活躍的借貸訂單\n\n"
 
+	frrFallbackRate := 0.0
+	for _, credit := range credits {
+		if credit.EffectiveDailyRate() == 0 {
+			rate, err := b.bitfinexClient.GetCurrentFundingRate(b.config.GetFundingSymbol())
+			if err != nil {
+				break
+			}
+			frrFallbackRate = rate
+			break
+		}
+	}
+
 	// 先計算所有訂單的統計信息
 	totalAmount := 0.0
 	totalDailyEarnings := 0.0
 	totalPeriodEarnings := 0.0
 
 	for _, credit := range credits {
-		dailyEarnings := credit.Amount * credit.Rate
+		effectiveRate := credit.EffectiveDailyRate()
+		if effectiveRate == 0 && frrFallbackRate > 0 {
+			effectiveRate = frrFallbackRate
+		}
+		dailyEarnings := credit.Amount * effectiveRate
 		periodEarnings := dailyEarnings * float64(credit.Period)
 
 		totalAmount += credit.Amount
@@ -577,7 +593,12 @@ func (b *Bot) handleLendingCredits(chatID int64) {
 		credit := credits[i]
 
 		// 計算收益
-		dailyEarnings := credit.Amount * credit.Rate
+		rawRate := credit.EffectiveDailyRate()
+		effectiveRate := rawRate
+		if effectiveRate == 0 && frrFallbackRate > 0 {
+			effectiveRate = frrFallbackRate
+		}
+		dailyEarnings := credit.Amount * effectiveRate
 		periodEarnings := dailyEarnings * float64(credit.Period)
 
 		// 格式化開始時間
@@ -585,7 +606,10 @@ func (b *Bot) handleLendingCredits(chatID int64) {
 
 		message += fmt.Sprintf("📊 訂單 #%d (ID: %d)\n", i+1, credit.ID)
 		message += fmt.Sprintf("💵 金額: %.2f %s\n", credit.Amount, b.config.Currency)
-		message += fmt.Sprintf("📈 日利率: %.4f%%\n", b.rateConverter.DecimalToPercentage(credit.Rate))
+		message += fmt.Sprintf("📈 日利率: %.4f%%\n", b.rateConverter.DecimalToPercentage(effectiveRate))
+		if strings.EqualFold(credit.RateType, "frr") || (rawRate == 0 && frrFallbackRate > 0) {
+			message += "🔖 來源: FRR\n"
+		}
 		message += fmt.Sprintf("💰 日收益: %.4f %s\n", dailyEarnings, b.config.Currency)
 		message += fmt.Sprintf("⏰ 期間: %d 天\n", credit.Period)
 		message += fmt.Sprintf("💎 期間總收益: %.4f %s\n", periodEarnings, b.config.Currency)
