@@ -40,6 +40,7 @@ type LoanOffer struct {
 	Amount float64
 	Rate   float64 // 日利率（小數格式）
 	Period int
+	UseFRR bool // 是否使用 FRR 掛單模式
 }
 
 // Execute 執行機器人主要邏輯
@@ -200,6 +201,7 @@ func (lb *LendingBot) calculateHighHoldOffers(splitFundsAvailable *float64) []*L
 			Amount: highHold,
 			Rate:   lb.config.GetHighHoldRateDecimal(),
 			Period: constants.Period120Days,
+			UseFRR: false, // 高額持有單固定走一般利率單
 		}
 		offers = append(offers, offer)
 		*splitFundsAvailable -= highHold
@@ -211,6 +213,7 @@ func (lb *LendingBot) calculateHighHoldOffers(splitFundsAvailable *float64) []*L
 // calculateSpreadOffers 計算分散貸出訂單
 func (lb *LendingBot) calculateSpreadOffers(splitFundsAvailable float64, fundingBook []*bitfinex.FundingBookEntry) []*LoanOffer {
 	var offers []*LoanOffer
+	useFRR := lb.config.IsMinDailyLendRateFRR()
 
 	numSplits := lb.config.SpreadLend
 	if numSplits <= 0 || splitFundsAvailable < lb.config.MinLoan {
@@ -277,6 +280,7 @@ func (lb *LendingBot) calculateSpreadOffers(splitFundsAvailable float64, funding
 			Amount: allocAmount,
 			Rate:   rate,
 			Period: period,
+			UseFRR: useFRR, // 分散單依 MIN_DAILY_LEND_RATE 是否為 FRR 決定
 		}
 		offers = append(offers, offer)
 
@@ -305,10 +309,8 @@ func (lb *LendingBot) calculatePeriod(dailyRate float64) int {
 func (lb *LendingBot) placeLoanOffers(loanOffers []*LoanOffer, hasPendingOrders bool) error {
 	orderCount := 0
 	fundingSymbol := lb.config.GetFundingSymbol()
-	useFRROffers := lb.config.IsMinDailyLendRateFRR()
-
-	if useFRROffers {
-		log.Printf("MIN_DAILY_LEND_RATE=%s，使用 FRR 模式掛單", constants.MinDailyRateModeFRR)
+	if lb.config.IsMinDailyLendRateFRR() {
+		log.Printf("MIN_DAILY_LEND_RATE=%s，分散單使用 FRR 模式；高額持有單維持固定利率", constants.MinDailyRateModeFRR)
 	}
 
 	for _, offer := range loanOffers {
@@ -316,7 +318,7 @@ func (lb *LendingBot) placeLoanOffers(loanOffers []*LoanOffer, hasPendingOrders 
 			break
 		}
 
-		if useFRROffers {
+		if offer.UseFRR {
 			frrPeriod := constants.Period120Days
 
 			if lb.config.TestMode {
@@ -753,6 +755,7 @@ func (lb *LendingBot) calculate90Percentile(candles []*bitfinex.Candle) float64 
 // calculateKlineSpreadOffers 基於K線目標利率計算分散訂單
 func (lb *LendingBot) calculateKlineSpreadOffers(fundsAvailable float64, targetRate float64) []*LoanOffer {
 	var offers []*LoanOffer
+	useFRR := lb.config.IsMinDailyLendRateFRR()
 
 	numSplits := lb.config.SpreadLend
 	if numSplits <= 0 || fundsAvailable < lb.config.MinLoan {
@@ -800,6 +803,7 @@ func (lb *LendingBot) calculateKlineSpreadOffers(fundsAvailable float64, targetR
 			Amount: allocAmount,
 			Rate:   rate,
 			Period: period,
+			UseFRR: useFRR, // K線分散單依 MIN_DAILY_LEND_RATE 是否為 FRR 決定
 		}
 		offers = append(offers, offer)
 	}

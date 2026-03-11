@@ -56,7 +56,7 @@ MAX_LOAN: 155                         # 最大貸出金額
 
 ### 📈 利率策略設定
 ```yaml
-MIN_DAILY_LEND_RATE: 0.038           # 最低日利率 (%)，可設為 FRR 啟用 FRR 掛單
+MIN_DAILY_LEND_RATE: 0.038           # 最低日利率 (%)，可設為 FRR（僅分散單用 FRR，高額持有單維持固定利率）
 SPREAD_LEND: 30                       # 資金分散筆數
 GAP_BOTTOM: 10                        # 訂單深度下限
 GAP_TOP: 5000                         # 訂單深度上限

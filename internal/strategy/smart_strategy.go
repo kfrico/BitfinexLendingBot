@@ -137,6 +137,7 @@ func (ss *SmartStrategy) calculateSmartHighHoldOffers(splitFundsAvailable *float
 			Amount: highHold,
 			Rate:   dynamicRate,
 			Period: period,
+			UseFRR: false, // 高額持有單固定走一般利率單
 		}
 		offers = append(offers, offer)
 		*splitFundsAvailable -= highHold
@@ -180,6 +181,7 @@ func (ss *SmartStrategy) calculateDynamicHighHoldRate(condition *MarketCondition
 // calculateSmartSpreadOffers 計算智能分散貸出訂單
 func (ss *SmartStrategy) calculateSmartSpreadOffers(splitFundsAvailable float64, fundingBook []*bitfinex.FundingBookEntry, condition *MarketCondition) []*LoanOffer {
 	var offers []*LoanOffer
+	useFRR := ss.config.IsMinDailyLendRateFRR()
 
 	numSplits := ss.config.SpreadLend
 	if numSplits <= 0 || splitFundsAvailable < ss.config.MinLoan {
@@ -265,6 +267,7 @@ func (ss *SmartStrategy) calculateSmartSpreadOffers(splitFundsAvailable float64,
 			Amount: allocAmount,
 			Rate:   rate,
 			Period: period,
+			UseFRR: useFRR, // 分散單依 MIN_DAILY_LEND_RATE 是否為 FRR 決定
 		}
 		offers = append(offers, offer)
 
