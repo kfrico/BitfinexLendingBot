@@ -341,7 +341,7 @@ func (app *Application) executeLendingCheck() {
 func main() {
 	app := cli.NewApp()
 	app.Name = "bitfinex-lending-bot"
-	app.Version = "v2.0.0"
+	app.Version = "v2.1.0"
 	app.Usage = "Automated Bitfinex lending bot with v2 API"
 
 	app.Flags = []cli.Flag{

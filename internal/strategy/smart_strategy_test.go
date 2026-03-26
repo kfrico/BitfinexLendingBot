@@ -1,11 +1,14 @@
 package strategy
 
 import (
+	"math"
 	"testing"
 
 	"github.com/kfrico/BitfinexLendingBot/internal/bitfinex"
 	"github.com/kfrico/BitfinexLendingBot/internal/config"
 )
+
+const floatTolerance = 1e-9
 
 func TestSmartStrategy_CalculateOptimalAllocation(t *testing.T) {
 	strategy := NewSmartStrategy(&config.Config{
@@ -74,10 +77,10 @@ func TestSmartStrategy_CalculateOptimalAllocation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			highHold, spread := strategy.calculateOptimalAllocation(tt.condition)
 
-			if highHold != tt.expectedHighHold {
+			if math.Abs(highHold-tt.expectedHighHold) > floatTolerance {
 				t.Errorf("Expected highHold %f, got %f", tt.expectedHighHold, highHold)
 			}
-			if spread != tt.expectedSpread {
+			if math.Abs(spread-tt.expectedSpread) > floatTolerance {
 				t.Errorf("Expected spread %f, got %f", tt.expectedSpread, spread)
 			}
 		})

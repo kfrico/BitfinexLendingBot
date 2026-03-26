@@ -4,6 +4,7 @@ BITFINEX_SECRET_KEY: "your_secret_key_here"
 CURRENCY: "usd"
 
 ORDER_LIMIT: 3 # 每次掛單只掛幾筆，避免一次掛太多都成立，錯過大利率
+RUN_ONLY_ON_NEW_CREDITS: false # true 時僅在新借貸成交或可用餘額顯著增加時重跑策略
 MINUTES_RUN: 3 # 每隔幾分鐘執行一次
 
 MIN_LOAN: 150 # 每筆最小金額
@@ -31,6 +32,12 @@ VOLATILITY_THRESHOLD: 0.002     # 高波動閾值 (預設: 0.002)
 MAX_RATE_MULTIPLIER: 2.0        # 最大利率倍數 (預設: 2.0)
 MIN_RATE_MULTIPLIER: 0.8        # 最小利率倍數 (預設: 0.8)
 RATE_RANGE_INCREASE_PERCENT: 0.2 # 利率範圍增加百分比 (預設: 0.2 = 20%)
+
+ENABLE_KLINE_STRATEGY: false
+KLINE_TIME_FRAME: "15m"
+KLINE_PERIOD: 24
+KLINE_SPREAD_PERCENT: 0
+KLINE_SMOOTH_METHOD: "ema"
 
 LENDING_CHECK_MINUTES: 5 #每隔五分鐘檢查是否有成功借貸的訂單
 TEST_MODE: true
