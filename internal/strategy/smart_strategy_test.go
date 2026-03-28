@@ -298,6 +298,53 @@ func TestSmartStrategy_CalculateSmartOffers(t *testing.T) {
 					t.Errorf("Offer %d has invalid period: %d", i, offer.Period)
 				}
 			}
+
+			if tt.name == "sufficient funds for both strategies" {
+				expectedAmounts := []float64{500.0, 500.0, 500.0, 500.0}
+				for i, expected := range expectedAmounts {
+					if offers[i].Amount != expected {
+						t.Errorf("Expected offer %d amount %f, got %f", i, expected, offers[i].Amount)
+					}
+				}
+			}
 		})
+	}
+}
+
+func TestSmartStrategy_OrderLimitReservesSlotsForHighHold(t *testing.T) {
+	cfg := &config.Config{
+		MinLoan:                       150.0,
+		MaxLoan:                       300.0,
+		SpreadLend:                    15,
+		OrderLimit:                    4,
+		HighHoldAmount:                300.0,
+		HighHoldOrders:                1,
+		HighHoldRate:                  0.1,
+		MinDailyLendRate:              0.02,
+		ThirtyDayLendRateThreshold:    0.04,
+		OneTwentyDayLendRateThreshold: 0.045,
+		EnableSmartStrategy:           true,
+		VolatilityThreshold:           0.002,
+		MaxRateMultiplier:             2.0,
+		MinRateMultiplier:             0.8,
+	}
+
+	strategy := NewSmartStrategy(cfg)
+	fundingBook := []*bitfinex.FundingBookEntry{
+		{Rate: 0.0003, Amount: 1000},
+		{Rate: 0.0004, Amount: 2000},
+		{Rate: 0.0005, Amount: 1500},
+	}
+
+	offers := strategy.CalculateSmartOffers(1097.0, fundingBook)
+	if len(offers) != 4 {
+		t.Fatalf("Expected 4 offers, got %d", len(offers))
+	}
+
+	expectedAmounts := []float64{300.0, 265.67, 265.67, 265.66}
+	for i, expected := range expectedAmounts {
+		if offers[i].Amount != expected {
+			t.Fatalf("Expected offer %d amount %f, got %f", i, expected, offers[i].Amount)
+		}
 	}
 }

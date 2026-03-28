@@ -61,8 +61,11 @@ func (ss *SmartStrategy) CalculateSmartOffers(fundsAvailable float64, fundingBoo
 
 	// 分散貸出策略（智能優化）
 	if splitFundsAvailable >= ss.config.MinLoan {
-		spreadOffers := ss.calculateSmartSpreadOffers(splitFundsAvailable, fundingBook, marketCondition)
-		loanOffers = append(loanOffers, spreadOffers...)
+		remainingSlots := ss.getRemainingOrderSlots(len(loanOffers))
+		if remainingSlots != 0 {
+			spreadOffers := ss.calculateSmartSpreadOffers(splitFundsAvailable, fundingBook, marketCondition, remainingSlots)
+			loanOffers = append(loanOffers, spreadOffers...)
+		}
 	}
 
 	return loanOffers
@@ -115,6 +118,7 @@ func (ss *SmartStrategy) calculateSmartHighHoldOffers(splitFundsAvailable *float
 	if ss.config.MaxLoan > 0 && highHold > ss.config.MaxLoan {
 		highHold = ss.config.MaxLoan
 	}
+	highHold = floorToCents(highHold)
 
 	// 計算動態利率
 	dynamicRate := ss.calculateDynamicHighHoldRate(condition, fundingBook)
@@ -179,32 +183,26 @@ func (ss *SmartStrategy) calculateDynamicHighHoldRate(condition *MarketCondition
 }
 
 // calculateSmartSpreadOffers 計算智能分散貸出訂單
-func (ss *SmartStrategy) calculateSmartSpreadOffers(splitFundsAvailable float64, fundingBook []*bitfinex.FundingBookEntry, condition *MarketCondition) []*LoanOffer {
+func (ss *SmartStrategy) calculateSmartSpreadOffers(splitFundsAvailable float64, fundingBook []*bitfinex.FundingBookEntry, condition *MarketCondition, maxOrders int) []*LoanOffer {
 	var offers []*LoanOffer
 	useFRR := ss.config.IsMinDailyLendRateFRR()
 
 	numSplits := ss.config.SpreadLend
+	if maxOrders > 0 && numSplits > maxOrders {
+		numSplits = maxOrders
+	}
 	if numSplits <= 0 || splitFundsAvailable < ss.config.MinLoan {
 		return offers
 	}
 
-	// 根據市場狀況調整分割數
+	// 根據市場狀況調整分散單最大目標筆數
 	if condition.Volatility > ss.config.VolatilityThreshold {
 		// 高波動時減少分割，提升競爭力
 		numSplits = int(float64(numSplits) * constants.ReducedSplitsMultiplier)
 	}
 
-	// 計算每筆金額
-	amtEach := splitFundsAvailable / float64(numSplits)
-	amtEach = float64(int64(amtEach*100)) / 100.0
-
-	// 調整分割數
-	for amtEach <= ss.config.MinLoan && numSplits > 1 {
-		numSplits--
-		amtEach = splitFundsAvailable / float64(numSplits)
-		amtEach = float64(int64(amtEach*100)) / 100.0
-	}
-	if numSplits <= 0 {
+	orderAmounts := buildOrderAmounts(splitFundsAvailable, numSplits, ss.config.MinLoan, ss.config.MaxLoan)
+	if len(orderAmounts) == 0 {
 		return offers
 	}
 
@@ -212,18 +210,18 @@ func (ss *SmartStrategy) calculateSmartSpreadOffers(splitFundsAvailable float64,
 	gapBottom, gapTop := ss.analyzer.GetOptimalDepthRange(splitFundsAvailable, condition)
 
 	// 計算利率遞增量
-	gapClimb := (gapTop - gapBottom) / float64(numSplits)
+	gapClimb := (gapTop - gapBottom) / float64(len(orderAmounts))
 	nextLend := gapBottom
 
 	minDailyRate := ss.config.GetMinDailyRateDecimal()
 
-	log.Printf("智能分散策略 - 分割數: %d, 深度範圍: %.0f-%.0f, Funding Book數據: %d筆",
-		numSplits, gapBottom, gapTop, len(fundingBook))
+	log.Printf("智能分散策略 - 實際分散筆數: %d, 深度範圍: %.0f-%.0f, Funding Book數據: %d筆",
+		len(orderAmounts), gapBottom, gapTop, len(fundingBook))
 
-	orderIndex := 0                  // 訂單索引，用於確保每個訂單有不同的索引
-	totalOriginalSplits := numSplits // 保存原始分割數
+	orderIndex := 0 // 訂單索引，用於確保每個訂單有不同的索引
+	totalOriginalSplits := len(orderAmounts)
 
-	for numSplits > 0 {
+	for _, allocAmount := range orderAmounts {
 		var currentDepthIndex int
 
 		if len(fundingBook) > 0 {
@@ -245,12 +243,6 @@ func (ss *SmartStrategy) calculateSmartSpreadOffers(splitFundsAvailable float64,
 		} else {
 			// 沒有funding book時，使用訂單索引作為虛擬深度
 			currentDepthIndex = orderIndex
-		}
-
-		// 計算金額
-		allocAmount := amtEach
-		if ss.config.MaxLoan > 0 && allocAmount > ss.config.MaxLoan {
-			allocAmount = ss.config.MaxLoan
 		}
 
 		if allocAmount < ss.config.MinLoan {
@@ -276,10 +268,22 @@ func (ss *SmartStrategy) calculateSmartSpreadOffers(splitFundsAvailable float64,
 
 		nextLend += gapClimb
 		orderIndex++ // 增加訂單索引確保下一個訂單有不同的深度索引
-		numSplits--
 	}
 
 	return offers
+}
+
+func (ss *SmartStrategy) getRemainingOrderSlots(existingOffers int) int {
+	if ss.config.OrderLimit <= 0 {
+		return -1
+	}
+
+	remaining := ss.config.OrderLimit - existingOffers
+	if remaining < 0 {
+		return 0
+	}
+
+	return remaining
 }
 
 // calculateSmartRate 計算智能利率

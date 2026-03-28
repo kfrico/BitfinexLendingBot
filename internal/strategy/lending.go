@@ -168,8 +168,11 @@ func (lb *LendingBot) calculateLoanOffers(fundsAvailable float64, fundingBook []
 
 	// 分散貸出策略
 	if splitFundsAvailable >= lb.config.MinLoan {
-		spreadOffers := lb.calculateSpreadOffers(splitFundsAvailable, fundingBook)
-		loanOffers = append(loanOffers, spreadOffers...)
+		remainingSlots := lb.getRemainingOrderSlots(len(loanOffers))
+		if remainingSlots != 0 {
+			spreadOffers := lb.calculateSpreadOffers(splitFundsAvailable, fundingBook, remainingSlots)
+			loanOffers = append(loanOffers, spreadOffers...)
+		}
 	}
 
 	return loanOffers
@@ -188,6 +191,7 @@ func (lb *LendingBot) calculateHighHoldOffers(splitFundsAvailable *float64) []*L
 	if lb.config.MaxLoan > 0 && highHold > lb.config.MaxLoan {
 		highHold = lb.config.MaxLoan
 	}
+	highHold = floorToCents(highHold)
 
 	possibleOrders := int(*splitFundsAvailable / highHold)
 	actualOrders := int(math.Min(float64(ordersCount), float64(possibleOrders)))
@@ -211,48 +215,36 @@ func (lb *LendingBot) calculateHighHoldOffers(splitFundsAvailable *float64) []*L
 }
 
 // calculateSpreadOffers 計算分散貸出訂單
-func (lb *LendingBot) calculateSpreadOffers(splitFundsAvailable float64, fundingBook []*bitfinex.FundingBookEntry) []*LoanOffer {
+func (lb *LendingBot) calculateSpreadOffers(splitFundsAvailable float64, fundingBook []*bitfinex.FundingBookEntry, maxOrders int) []*LoanOffer {
 	var offers []*LoanOffer
 	useFRR := lb.config.IsMinDailyLendRateFRR()
 
 	numSplits := lb.config.SpreadLend
+	if maxOrders > 0 && numSplits > maxOrders {
+		numSplits = maxOrders
+	}
 	if numSplits <= 0 || splitFundsAvailable < lb.config.MinLoan {
 		return offers
 	}
 
-	// 計算每筆金額
-	amtEach := splitFundsAvailable / float64(numSplits)
-	amtEach = float64(int64(amtEach*100)) / 100.0
-
-	// 調整分割數
-	for amtEach <= lb.config.MinLoan && numSplits > 1 {
-		numSplits--
-		amtEach = splitFundsAvailable / float64(numSplits)
-		amtEach = float64(int64(amtEach*100)) / 100.0
-	}
-	if numSplits <= 0 {
+	orderAmounts := buildOrderAmounts(splitFundsAvailable, numSplits, lb.config.MinLoan, lb.config.MaxLoan)
+	if len(orderAmounts) == 0 {
 		return offers
 	}
 
 	// 計算利率遞增量
-	gapClimb := (lb.config.GapTop - lb.config.GapBottom) / float64(numSplits)
+	gapClimb := (lb.config.GapTop - lb.config.GapBottom) / float64(len(orderAmounts))
 	nextLend := lb.config.GapBottom
 
 	depthIndex := 0
 	minDailyRate := lb.config.GetMinDailyRateDecimal()
 
-	for numSplits > 0 {
+	for _, allocAmount := range orderAmounts {
 		// 累計市場量至指定利率區間（僅在有funding book數據時）
 		if len(fundingBook) > 0 {
 			for float64(depthIndex) < nextLend && depthIndex < len(fundingBook)-1 {
 				depthIndex++
 			}
-		}
-
-		// 計算金額
-		allocAmount := amtEach
-		if lb.config.MaxLoan > 0 && allocAmount > lb.config.MaxLoan {
-			allocAmount = lb.config.MaxLoan
 		}
 
 		if allocAmount < lb.config.MinLoan {
@@ -285,7 +277,6 @@ func (lb *LendingBot) calculateSpreadOffers(splitFundsAvailable float64, funding
 		offers = append(offers, offer)
 
 		nextLend += gapClimb
-		numSplits--
 	}
 
 	return offers
@@ -316,6 +307,12 @@ func (lb *LendingBot) placeLoanOffers(loanOffers []*LoanOffer, hasPendingOrders 
 	for _, offer := range loanOffers {
 		if lb.config.OrderLimit != 0 && orderCount >= lb.config.OrderLimit {
 			break
+		}
+
+		offer.Amount = floorToCents(offer.Amount)
+		if offer.Amount < lb.config.MinLoan {
+			log.Printf("跳過無效金額: %.4f", offer.Amount)
+			continue
 		}
 
 		if offer.UseFRR {
@@ -630,8 +627,11 @@ func (lb *LendingBot) calculateKlineOffers(fundsAvailable float64) []*LoanOffer 
 
 	// 使用目標利率創建分散訂單
 	if splitFundsAvailable >= lb.config.MinLoan {
-		klineOffers := lb.calculateKlineSpreadOffers(splitFundsAvailable, targetRate)
-		loanOffers = append(loanOffers, klineOffers...)
+		remainingSlots := lb.getRemainingOrderSlots(len(loanOffers))
+		if remainingSlots != 0 {
+			klineOffers := lb.calculateKlineSpreadOffers(splitFundsAvailable, targetRate, remainingSlots)
+			loanOffers = append(loanOffers, klineOffers...)
+		}
 	}
 
 	return loanOffers
@@ -753,37 +753,25 @@ func (lb *LendingBot) calculate90Percentile(candles []*bitfinex.Candle) float64 
 }
 
 // calculateKlineSpreadOffers 基於K線目標利率計算分散訂單
-func (lb *LendingBot) calculateKlineSpreadOffers(fundsAvailable float64, targetRate float64) []*LoanOffer {
+func (lb *LendingBot) calculateKlineSpreadOffers(fundsAvailable float64, targetRate float64, maxOrders int) []*LoanOffer {
 	var offers []*LoanOffer
 	useFRR := lb.config.IsMinDailyLendRateFRR()
 
 	numSplits := lb.config.SpreadLend
+	if maxOrders > 0 && numSplits > maxOrders {
+		numSplits = maxOrders
+	}
 	if numSplits <= 0 || fundsAvailable < lb.config.MinLoan {
 		return offers
 	}
 
-	// 計算每筆金額
-	amtEach := fundsAvailable / float64(numSplits)
-	amtEach = float64(int64(amtEach*100)) / 100.0
-
-	// 調整分割數
-	for amtEach <= lb.config.MinLoan && numSplits > 1 {
-		numSplits--
-		amtEach = fundsAvailable / float64(numSplits)
-		amtEach = float64(int64(amtEach*100)) / 100.0
-	}
-	if numSplits <= 0 {
+	orderAmounts := buildOrderAmounts(fundsAvailable, numSplits, lb.config.MinLoan, lb.config.MaxLoan)
+	if len(orderAmounts) == 0 {
 		return offers
 	}
 
 	// 創建訂單，使用目標利率為基準，微調以分散風險
-	for i := 0; i < numSplits; i++ {
-		// 計算金額
-		allocAmount := amtEach
-		if lb.config.MaxLoan > 0 && allocAmount > lb.config.MaxLoan {
-			allocAmount = lb.config.MaxLoan
-		}
-
+	for i, allocAmount := range orderAmounts {
 		if allocAmount < lb.config.MinLoan {
 			break
 		}
@@ -809,4 +797,17 @@ func (lb *LendingBot) calculateKlineSpreadOffers(fundsAvailable float64, targetR
 	}
 
 	return offers
+}
+
+func (lb *LendingBot) getRemainingOrderSlots(existingOffers int) int {
+	if lb.config.OrderLimit <= 0 {
+		return -1
+	}
+
+	remaining := lb.config.OrderLimit - existingOffers
+	if remaining < 0 {
+		return 0
+	}
+
+	return remaining
 }

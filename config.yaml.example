@@ -11,7 +11,7 @@ MIN_LOAN: 150 # 每筆最小金額
 #MAX_LOAN: 150 # 每筆最大金額
 
 MIN_DAILY_LEND_RATE: 0.02 # 最小利率（可設為 FRR，僅分散單改用 FRR 模式；高額持有單維持 HIGH_HOLD_RATE）
-SPREAD_LEND: 30 # 資金分配幾份
+SPREAD_LEND: 30 # 分散單最大目標筆數
 GAP_BOTTOM: 10 # 參數是指ask掛單裡面第幾個index 下限 通常有好幾千個掛
 GAP_TOP: 5000 # 參數是指ask掛單裡面第幾個index 上限 通常有好幾千個掛單
 THIRTY_DAY_LEND_RATE_THRESHOLD: 0.04 # 超過多少就掛30天的單

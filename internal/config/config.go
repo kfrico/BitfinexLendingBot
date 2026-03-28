@@ -30,7 +30,7 @@ type Config struct {
 
 	// 利率策略
 	MinDailyLendRate              any     `mapstructure:"MIN_DAILY_LEND_RATE"` // 支援數值或 "FRR"
-	SpreadLend                    int     `mapstructure:"SPREAD_LEND"`
+	SpreadLend                    int     `mapstructure:"SPREAD_LEND"`         // 分散單最大目標筆數
 	GapBottom                     float64 `mapstructure:"GAP_BOTTOM"`
 	GapTop                        float64 `mapstructure:"GAP_TOP"`
 	ThirtyDayLendRateThreshold    float64 `mapstructure:"THIRTY_DAY_LEND_RATE_THRESHOLD"`

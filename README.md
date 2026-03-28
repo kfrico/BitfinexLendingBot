@@ -69,7 +69,7 @@ TEST_MODE: true                  # 測試模式
 
 ```yaml
 MIN_DAILY_LEND_RATE: 0.038       # 可設數值或 FRR
-SPREAD_LEND: 30                  # 分散單數量
+SPREAD_LEND: 30                  # 分散單最大目標筆數
 GAP_BOTTOM: 10                   # 掛單深度下限
 GAP_TOP: 5000                    # 掛單深度上限
 THIRTY_DAY_LEND_RATE_THRESHOLD: 0.04
@@ -78,6 +78,7 @@ RATE_BONUS: 0.002                # 沒有未完成掛單時的利率加成
 ```
 
 `MIN_DAILY_LEND_RATE: FRR` 時，分散單會使用 FRR 掛單模式；高額持有單仍維持 `HIGH_HOLD_RATE` 固定利率。
+`SPREAD_LEND` 是分散單的最大目標筆數，實際筆數還會受到 `ORDER_LIMIT`、高額持有已占用筆數、`MIN_LOAN`、`MAX_LOAN` 與剩餘資金影響。
 
 ### 💎 高額持有策略
 

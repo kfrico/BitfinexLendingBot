@@ -16,7 +16,7 @@ MAX_LOAN: 1000.0
 
 # 利率設定
 MIN_DAILY_LEND_RATE: 0.01  # 最低日利率 0.01%
-SPREAD_LEND: 5             # 分散貸出筆數
+SPREAD_LEND: 5             # 分散單最大目標筆數
 
 # 期間設定
 THIRTY_DAY_LEND_RATE_THRESHOLD: 0.05    # 30天期間閾值 0.05%
